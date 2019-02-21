@@ -28,7 +28,7 @@ void GLShader::AddShaderFromFile(GLuint shaderType, const char* filePath)
 {
 	if (filePath)
 	{
-		std::ifstream t("file.txt");
+		std::ifstream t(filePath);
 		std::stringstream buffer;
 		buffer << t.rdbuf();
 

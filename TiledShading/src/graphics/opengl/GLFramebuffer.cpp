@@ -30,6 +30,12 @@ GLFramebuffer::~GLFramebuffer()
 }
 
 
+GLFramebuffer* GLFramebuffer::GetDefaultFramebuffer()
+{
+	return new GLFramebuffer();
+}
+
+
 GLTexture2D* GLFramebuffer::AttachTexture(GLuint internalFormat, GLuint storageType, unsigned int attachment /*= 0*/) const
 {
 	GLint fbDim[4];
@@ -156,6 +162,7 @@ void GLFramebuffer::EnableDefaultBlending(GLenum srcFactor, GLenum dstFactor)
 void GLFramebuffer::Bind() const
 {
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, m_FramebufferRendererID));
+	GLCall(glViewport(0, 0, m_Width, m_Height));
 }
 
 void GLFramebuffer::Unbind()
@@ -240,4 +247,17 @@ GLuint GLFramebuffer::GetBaseFormat(GLuint internalFormat)
 	default:
 		return 0;
 	}
+}
+
+
+GLFramebuffer::GLFramebuffer()
+	: m_NumAttachedTextures(0), m_FramebufferRendererID(0), m_DepthStencilRenderbufferID(0)
+{
+	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+
+	int v[4];
+	GLCall(glGetIntegerv(GL_VIEWPORT, v));
+
+	m_Width = v[2];
+	m_Height = v[3];
 }

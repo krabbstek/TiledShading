@@ -11,6 +11,8 @@
 
 GLFWwindow* window;
 
+GLFramebuffer* defaultFramebuffer;
+
 int main()
 {
 	int glfwResult = glfwInit();
@@ -41,15 +43,90 @@ int main()
 		return -1;
 	}
 
-	GLCall(glClearColor(0.67f, 0.94f, 0.36f, 0.0f));
-
-	while (!glfwWindowShouldClose(window))
 	{
-		glfwPollEvents();
+		GLShader shader;
+		shader.AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/simple_vs.glsl");
+		shader.AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/simple_fs.glsl");
+		shader.CompileShaders();
 
-		GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+		GLShader fullscreenShader;
+		fullscreenShader.AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/fullscreen_vs.glsl");
+		fullscreenShader.AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/fullscreen_fs.glsl");
+		fullscreenShader.CompileShaders();
 
-		glfwSwapBuffers(window);
+		float vertices[] =
+		{
+			-0.5f, -0.5f,  0.5f,
+			 0.5f, -0.5f,  0.5f,
+			 0.5f,  0.5f,  0.5f,
+		};
+		unsigned int indices[] =
+		{
+			0, 1, 2,
+		};
+
+		GLVertexBuffer vbo(vertices, sizeof(vertices));
+		GLVertexBufferLayout layout;
+		layout.Push(GL_FLOAT, 3);
+		vbo.SetVertexBufferLayout(layout);
+		GLVertexArray vao;
+		vao.AddVertexBuffer(vbo);
+		GLIndexBuffer ibo(indices, sizeof(indices) / sizeof(unsigned int));
+
+		float fullscreenVertices[] =
+		{
+			-1.0f, -1.0f,  0.5f,  0.0f, 1.0f,
+			 1.0f, -1.0f,  0.5f,  1.0f, 1.0f,
+			 1.0f,  1.0f,  0.5f,  1.0f, 0.0f,
+			-1.0f,  1.0f,  0.5f,  0.0f, 0.0f,
+		};
+		unsigned int fullscreenIndices[] =
+		{
+			0, 1, 2,
+			0, 2, 3,
+		};
+
+		GLVertexBuffer fsVBO(fullscreenVertices, sizeof(fullscreenVertices));
+		layout.Push(GL_FLOAT, 2);
+		fsVBO.SetVertexBufferLayout(layout);
+		GLVertexArray fsVAO;
+		fsVAO.AddVertexBuffer(fsVBO);
+		GLIndexBuffer fsIBO(fullscreenIndices, sizeof(fullscreenIndices) / sizeof(unsigned int));
+
+		defaultFramebuffer = GLFramebuffer::GetDefaultFramebuffer();
+
+		GLFramebuffer intermediateFramebuffer(80, 60);
+		GLTexture2D intermediateFramebufferTexture;
+		intermediateFramebuffer.AttachTexture(intermediateFramebufferTexture, GL_RGB8, GL_UNSIGNED_BYTE, 0);
+		intermediateFramebuffer.Bind();
+		//GLCall(glClearColor(0.67f, 0.94f, 0.36f, 0.0f));
+
+		while (!glfwWindowShouldClose(window))
+		{
+			glfwPollEvents();
+
+			intermediateFramebuffer.Bind();
+			GLCall(glClearColor(0.67f, 0.94f, 0.36f, 0.0f));
+			GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+			shader.Bind();
+			vao.Bind();
+			ibo.Bind();
+			GLCall(glDrawElements(GL_TRIANGLES, ibo.Count(), GL_UNSIGNED_INT, 0));
+
+			defaultFramebuffer->Bind();
+			GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+			fullscreenShader.Bind();
+			intermediateFramebufferTexture.Bind();
+			fsVAO.Bind();
+			fsIBO.Bind();
+			GLCall(glDrawElements(GL_TRIANGLES, fsIBO.Count(), GL_UNSIGNED_INT, 0));
+
+			glfwSwapBuffers(window);
+		}
+
+		delete defaultFramebuffer;
 	}
 
 	glfwTerminate();
