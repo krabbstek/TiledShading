@@ -33,6 +33,7 @@ workspace "TiledShading"
             "%{prj.name}/src",
             "%{prj.name}/vendor/glad/include",
             "%{prj.name}/vendor/imgui",
+            "%{prj.name}/vendor/stb",
             "%{wks.relpath}/Dependencies/GLFW/include",
         }
 
