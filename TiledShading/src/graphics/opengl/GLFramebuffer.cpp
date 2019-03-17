@@ -245,7 +245,7 @@ GLuint GLFramebuffer::GetBaseFormat(GLuint internalFormat)
 		return GL_RGBA;
 
 	default:
-		return 0;
+		return internalFormat;
 	}
 }
 
