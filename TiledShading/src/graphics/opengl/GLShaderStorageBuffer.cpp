@@ -3,24 +3,25 @@
 #include "GLCommon.h"
 
 GLShaderStorageBuffer::GLShaderStorageBuffer(const void* data, unsigned int size)
+	: m_RendererID(0), m_Size(size)
 {
-	SetData(data, size);
+	GLCall(glGenBuffers(1, &m_RendererID));
 }
 
 GLShaderStorageBuffer::~GLShaderStorageBuffer()
 {
 	if (m_RendererID)
+	{
 		GLCall(glDeleteBuffers(1, &m_RendererID));
+	}
 }
 
 
 void GLShaderStorageBuffer::SetData(const void* data, unsigned int size)
 {
-	if (!m_RendererID)
-		GLCall(glGenBuffers(1, &m_RendererID));
-
 	Bind();
 	GLCall(glBufferData(GL_SHADER_STORAGE_BUFFER, size, data, GL_DYNAMIC_DRAW));
+	m_Size = size;
 }
 
 
