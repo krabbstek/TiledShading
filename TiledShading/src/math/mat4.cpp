@@ -620,7 +620,7 @@ vec3 mat4::RightMultiply(const vec3& vec) const
 
 vec4 mat4::Multiply(const vec4& vec) const
 {
-	vec3 result;
+	vec4 result;
 
 	result.x = elements[INDEX(0, 0)] * vec.x
 		+ elements[INDEX(0, 1)] * vec.y
@@ -647,7 +647,7 @@ vec4 mat4::Multiply(const vec4& vec) const
 
 vec4 mat4::RightMultiply(const vec4& vec) const
 {
-	vec3 result;
+	vec4 result;
 
 	result.x = elements[INDEX(0, 0)] * vec.x
 		+ elements[INDEX(1, 0)] * vec.y

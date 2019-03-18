@@ -8,6 +8,8 @@ public:
 	GLShaderStorageBuffer(const void* data, unsigned int size);
 	~GLShaderStorageBuffer();
 
+	void SetData(const void* data, unsigned int size);
+
 	void Bind() const;
 	void Unbind() const;
 
