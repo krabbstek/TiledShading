@@ -23,6 +23,12 @@ struct Light
 	vec4 color;
 };
 
+struct LightIndex
+{
+	uint offset;
+	uint count;
+};
+
 layout (std430, binding = 3) buffer LightBuffer
 {
 	Light lights[];
@@ -53,9 +59,6 @@ float brdf(float F, float D, float G, float n_wo, float n_wi)
 
 void main()
 {
-	//vec3 albedo = texture(u_Albedo, texCoords).rgb;
-	//vec3 viewSpacePosition = texture(u_ViewSpacePosition, texCoords).xyz;
-	//vec3 viewSpaceNormal = texture(u_ViewSpaceNormal, texCoords).xyz;
 	ivec2 texCoords = ivec2(gl_FragCoord.xy);
 
 	vec3 albedo = texelFetch(u_Albedo, texCoords, 0).rgb;
