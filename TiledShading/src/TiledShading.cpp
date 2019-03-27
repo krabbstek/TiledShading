@@ -20,12 +20,12 @@
 
 constexpr unsigned int WINDOW_WIDTH = 1280;
 constexpr unsigned int WINDOW_HEIGHT = 720;
-constexpr unsigned int TILE_SIZE = 40;
+constexpr unsigned int TILE_SIZE = 80;
 constexpr int tileCols = WINDOW_WIDTH / TILE_SIZE;
 constexpr int tileRows = WINDOW_HEIGHT / TILE_SIZE;
 
 constexpr int CUBE_GRID_SIZE = 9;
-constexpr int LIGHT_GRID_SIZE = 5;
+constexpr int LIGHT_GRID_SIZE = 30;
 
 constexpr float fov = DegToRad(75.0f);
 
@@ -45,7 +45,7 @@ float currentTime;
 std::vector<Plane> leftPlanes, rightPlanes, bottomPlanes, topPlanes;
 std::vector<std::pair<unsigned int, unsigned int>> tileLights[tileRows][tileCols];
 
-RENDER_MODE renderMode = TILE_MIN_DEPTH;
+RENDER_MODE renderMode = TILED_DEFERRED;
 
 Light lights[LIGHT_GRID_SIZE][LIGHT_GRID_SIZE];
 
@@ -76,8 +76,8 @@ unsigned int planeIndices[] =
 };
 
 vec3 lightGridOffset(0.0f, 1.0f, 0.0f);
-vec2 lightGridScale(3.5f, 3.5f);
-float lightIntensity = 3.0f;
+vec2 lightGridScale(0.7f); //(3.5f);
+float lightIntensity = 0.1f; // 3.0f;
 float lightRadiusMultiplier = 1.0f;
 bool dynamicLights = true;
 
@@ -107,6 +107,7 @@ GLShader* deferredShader;
 GLShader* fullscreenShader;
 GLShader* prepassShader;
 GLShader* lightingNonTiledShader;
+GLShader* lightingTiledShader;
 GLShader* depthShader;
 GLShader* simpleShader;
 GLShader* tileDepthShader;
@@ -117,6 +118,8 @@ GLVertexBuffer* fullscreenVBO;
 GLVertexArray* fullscreenVAO;
 GLIndexBuffer* fullscreenIBO;
 GLShaderStorageBuffer* lightSSBO;
+GLShaderStorageBuffer* lightIndexSSBO;
+GLShaderStorageBuffer* tileIndexSSBO;
 GLVertexBuffer* planeVBO;
 GLVertexArray* planeVAO;
 GLIndexBuffer* planeIBO;
@@ -209,6 +212,8 @@ int main()
 			}
 		}
 		lightSSBO = new GLShaderStorageBuffer(lights, sizeof(lights));
+		lightIndexSSBO = new GLShaderStorageBuffer(0, 0);
+		tileIndexSSBO = new GLShaderStorageBuffer(0, 0);
 
 		material.albedo = vec4(0.2, 0.3, 0.8);
 		material.reflectivity = 1.0;
@@ -321,6 +326,11 @@ int main()
 		lightingNonTiledShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/lighting_nontiled_vs.glsl");
 		lightingNonTiledShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/lighting_nontiled_fs.glsl");
 		lightingNonTiledShader->CompileShaders();
+
+		lightingTiledShader = new GLShader();
+		lightingTiledShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/lighting_tiled_vs.glsl");
+		lightingTiledShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/lighting_tiled_fs.glsl");
+		lightingTiledShader->CompileShaders();
 
 		depthShader = new GLShader();
 		depthShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/depth_vs.glsl");
@@ -511,38 +521,6 @@ void ImGuiRender()
 
 void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 {
-#if 0
-	// http://glampert.com/2014/01-26/visualizing-the-depth-buffer/
-
-	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
-	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
-	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-
-	for (int x = 0; x < 9; x++)
-		for (int z = 0; z < 9; z++)
-			cubeGrid[x][z].Render(renderer, *simpleShader);
-
-	mat4 V = renderer.camera.GetViewMatrix();
-	mat4 P = renderer.camera.projectionMatrix;
-	simpleShader->SetUniformMat4("u_MVP", P * V);
-	planeVAO->Bind();
-	planeIBO->Bind();
-	GLCall(glDrawElements(GL_TRIANGLES, planeIBO->Count(), GL_UNSIGNED_INT, 0));
-
-	prepassDepthTexture->Bind();
-	//GLCall(glReadBuffer(GL_BACK));
-	GLCall(glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 0));
-
-	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
-	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-	fullscreenShader->Bind();
-	fullscreenVAO->Bind();
-	fullscreenIBO->Bind();
-	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
-
-	// Earlier version
-#else
-
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -558,7 +536,6 @@ void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	planeVAO->Bind();
 	planeIBO->Bind();
 	GLCall(glDrawElements(GL_TRIANGLES, planeIBO->Count(), GL_UNSIGNED_INT, 0));
-#endif
 }
 
 void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
@@ -652,6 +629,7 @@ void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 	tileMaxTexture->Bind();
 	tileDepthShader->Bind();
+	tileDepthShader->SetUniform1i("u_TileSize", TILE_SIZE);
 	fullscreenVAO->Bind();
 	fullscreenIBO->Bind();
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
@@ -687,7 +665,6 @@ void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	prepassAlbedoTexture->Bind(0);
 	prepassViewSpacePositionTexture->Bind(1);
 	prepassViewSpaceNormalTexture->Bind(2);
-	lightSSBO->Bind();
 	GLCall(glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 3, lightSSBO->RendererID(), 0, lightSSBO->Size()));
 	fullscreenVAO->Bind();
 	fullscreenIBO->Bind();
@@ -696,6 +673,7 @@ void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 
 void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 {
+	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -729,53 +707,81 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 
 	for (int lightX = 0; lightX < LIGHT_GRID_SIZE; lightX++)
 	{
-		for (int lightY = 0; lightY < LIGHT_GRID_SIZE; lightY++)
+		for (int lightZ = 0; lightZ < LIGHT_GRID_SIZE; lightZ++)
 		{
 			for (int col = 0; col < tileCols; col++)
 			{
-				float dLeft = leftPlanes[col].Distance(lights[lightX][lightY].viewSpacePosition);
+				float dLeft = leftPlanes[col].Distance(lights[lightX][lightZ].viewSpacePosition);
 				if (dLeft < -lightRadius)
 					continue;
-				float dRight = rightPlanes[col].Distance(lights[lightX][lightY].viewSpacePosition);
+				float dRight = rightPlanes[col].Distance(lights[lightX][lightZ].viewSpacePosition);
 				if (dRight < -lightRadius)
 					continue;
 
 				for (int row = 0; row < tileRows; row++)
 				{
-					float dBottom = bottomPlanes[row].Distance(lights[lightX][lightY].viewSpacePosition);
+					float dBottom = bottomPlanes[row].Distance(lights[lightX][lightZ].viewSpacePosition);
 					if (dBottom < -lightRadius)
 						continue;
-					float dTop = topPlanes[row].Distance(lights[lightX][lightY].viewSpacePosition);
+					float dTop = topPlanes[row].Distance(lights[lightX][lightZ].viewSpacePosition);
 					if (dTop < -lightRadius)
 						continue;
 
-					float dNear = lights[lightX][lightY].viewSpacePosition.z - tileMin[row * (WINDOW_WIDTH / TILE_SIZE) + col];
+					/*float dNear = lights[lightX][lightZ].viewSpacePosition.z - tileMin[row * (WINDOW_WIDTH / TILE_SIZE) + col];
 					if (dNear > lightRadius)
 						continue;
 
-					float dFar = lights[lightX][lightY].viewSpacePosition.z - tileMax[row * (WINDOW_WIDTH / TILE_SIZE) + col];
+					float dFar = lights[lightX][lightZ].viewSpacePosition.z - tileMax[row * (WINDOW_WIDTH / TILE_SIZE) + col];
 					if (dFar < -lightRadius)
-						continue;
+						continue;*/
 
-					tileLights[row][col].emplace_back(lightX, lightY);
+					tileLights[row][col].emplace_back(lightX, lightZ);
 				}
 			}
 		}
 	}
 
+	int tileLightIndices[2 * WINDOW_WIDTH * WINDOW_HEIGHT / (TILE_SIZE * TILE_SIZE)];
+	std::vector<int> lightIndices;
+
+	for (int row = 0; row < tileRows; row++)
+	{
+		for (int col = 0; col < tileCols; col++)
+		{
+			tileLightIndices[2 * (tileCols * row + col)] = lightIndices.size();
+			int size = tileLights[row][col].size();
+			tileLightIndices[2 * (tileCols * row + col) + 1] = size;
+			for (int i = 0; i < size; i++)
+			{
+				std::pair<int, int> ind = tileLights[row][col][i];
+				lightIndices.emplace_back(ind.first * LIGHT_GRID_SIZE + ind.second);
+			}
+		}
+	}
+	if (!lightIndices.size())
+		lightIndices.push_back(0);
+	lightIndexSSBO->SetData(lightIndices.data(), lightIndices.size() * sizeof(int));
+	tileIndexSSBO->SetData(tileLightIndices, sizeof(tileLightIndices));
+
+	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-	lightingNonTiledShader->Bind();
-	lightingNonTiledShader->SetUniform4f("u_Material.albedo", material.albedo);
-	lightingNonTiledShader->SetUniform1f("u_Material.reflectivity", material.reflectivity);
-	lightingNonTiledShader->SetUniform1f("u_Material.shininess", material.shininess);
-	lightingNonTiledShader->SetUniform1f("u_Material.metalness", material.metalness);
-	lightingNonTiledShader->SetUniform1f("u_Material.fresnel", material.fresnel);
+
+	lightingTiledShader->Bind();
+	lightingTiledShader->SetUniform4f("u_Material.albedo", material.albedo);
+	lightingTiledShader->SetUniform1f("u_Material.reflectivity", material.reflectivity);
+	lightingTiledShader->SetUniform1f("u_Material.shininess", material.shininess);
+	lightingTiledShader->SetUniform1f("u_Material.metalness", material.metalness);
+	lightingTiledShader->SetUniform1f("u_Material.fresnel", material.fresnel);
+	lightingTiledShader->SetUniform1i("u_TileSize", TILE_SIZE);
+	lightingTiledShader->SetUniform1i("u_NumTileCols", tileCols);
+
 	prepassAlbedoTexture->Bind(0);
 	prepassViewSpacePositionTexture->Bind(1);
 	prepassViewSpaceNormalTexture->Bind(2);
-	lightSSBO->Bind();
 	GLCall(glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 3, lightSSBO->RendererID(), 0, lightSSBO->Size()));
+	GLCall(glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 4, lightIndexSSBO->RendererID(), 0, lightIndexSSBO->Size()));
+	GLCall(glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 5, tileIndexSSBO->RendererID(), 0, tileIndexSSBO->Size()));
 	fullscreenVAO->Bind();
 	fullscreenIBO->Bind();
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
