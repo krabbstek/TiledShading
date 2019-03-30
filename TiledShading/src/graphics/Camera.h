@@ -10,5 +10,5 @@ public:
 	vec3 rotation;
 	mat4 projectionMatrix;
 	
-	mat4 GetViewMatrix();
+	mat4 GetViewMatrix() const;
 };
