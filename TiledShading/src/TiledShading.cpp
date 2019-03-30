@@ -1,4 +1,5 @@
-﻿#include "Plane.h"
+﻿#include "Globals.h"
+#include "Plane.h"
 #include "graphics/Light.h"
 #include "graphics/Material.h"
 #include "graphics/Renderer.h"
@@ -6,6 +7,8 @@
 #include "math/math.h"
 #include "meshes/Cube.h"
 #include "meshes/PlaneMesh.h"
+#include "graphics/RenderTechnique.h"
+#include "graphics/renderpasses/ForwardPrepass.h"
 
 #include <chrono>
 #include <iostream>
@@ -19,11 +22,7 @@
 
 #define USE_IMGUI
 
-constexpr unsigned int WINDOW_WIDTH = 1280;
-constexpr unsigned int WINDOW_HEIGHT = 720;
-constexpr unsigned int TILE_SIZE = 40;
-constexpr int tileCols = WINDOW_WIDTH / TILE_SIZE;
-constexpr int tileRows = WINDOW_HEIGHT / TILE_SIZE;
+
 
 constexpr int CUBE_GRID_SIZE = 9;
 constexpr int LIGHT_GRID_SIZE = 30;
@@ -46,7 +45,7 @@ float currentTime;
 std::vector<Plane> leftPlanes, rightPlanes, bottomPlanes, topPlanes;
 std::vector<std::pair<unsigned int, unsigned int>> tileLights[tileRows][tileCols];
 std::vector<int> lightIndices;
-int tileLightIndices[2 * WINDOW_WIDTH * WINDOW_HEIGHT / (TILE_SIZE * TILE_SIZE)];
+int tileLightIndices[2 * g_WindowWidth * g_WindowHeight / (TILE_SIZE * TILE_SIZE)];
 
 RENDER_MODE renderMode = TILED_DEFERRED;
 
@@ -74,6 +73,9 @@ bool dynamicLights = true;
 GLFWwindow* window;
 
 Renderer renderer;
+
+/// Render techniques
+RenderTechnique g_ForwardRendering;
 
 /// Framebuffers
 GLuint defaultFramebuffer = 0;
@@ -127,7 +129,7 @@ void ImGuiRender();
 
 int main()
 {
-	static_assert(!((WINDOW_WIDTH % TILE_SIZE) | (WINDOW_HEIGHT % TILE_SIZE)));
+	static_assert(!((g_WindowWidth % TILE_SIZE) | (g_WindowHeight % TILE_SIZE)));
 
 	start = std::chrono::high_resolution_clock::now();
 
@@ -169,7 +171,7 @@ int main()
 	topPlanes.push_back(Plane(vec3(0.0f, -cos(halfFovPerTile * tileCols), -sin(halfFovPerTile * tileCols)), 0));
 
 	{
-		renderer.camera.projectionMatrix = mat4::Perspective(fov, float(WINDOW_WIDTH) / float(WINDOW_HEIGHT), 0.1f, 100.0f);
+		renderer.camera.projectionMatrix = mat4::Perspective(fov, float(g_WindowWidth) / float(g_WindowHeight), 0.1f, 100.0f);
 		renderer.camera.position = vec3(0.0f, 4.0f, 12.0f);
 		renderer.camera.rotation = vec3(-0.4f, 0.0f, 0.0f);
 		mat4 V = renderer.camera.GetViewMatrix();
@@ -211,32 +213,32 @@ int main()
 
 		/// Textures
 		prepassDepthTexture = new GLTexture2D();
-		prepassDepthTexture->Load(GL_R32F, nullptr, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RED, GL_FLOAT);
+		prepassDepthTexture->Load(GL_R32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RED, GL_FLOAT);
 		prepassDepthTexture->SetMinMagFilter(GL_LINEAR);
 		prepassDepthTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
 		prepassAlbedoTexture = new GLTexture2D();
-		prepassAlbedoTexture->Load(GL_RGB32F, nullptr, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGB, GL_FLOAT);
+		prepassAlbedoTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_FLOAT);
 		prepassAlbedoTexture->SetMinMagFilter(GL_LINEAR);
 		prepassAlbedoTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
 		prepassViewSpacePositionTexture = new GLTexture2D();
-		prepassViewSpacePositionTexture->Load(GL_RGB32F, nullptr, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGB, GL_FLOAT);
+		prepassViewSpacePositionTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_FLOAT);
 		prepassViewSpacePositionTexture->SetMinMagFilter(GL_LINEAR);
 		prepassViewSpacePositionTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
 		prepassViewSpaceNormalTexture = new GLTexture2D();
-		prepassViewSpaceNormalTexture->Load(GL_RGB32F, nullptr, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGB, GL_FLOAT);
+		prepassViewSpaceNormalTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_FLOAT);
 		prepassViewSpaceNormalTexture->SetMinMagFilter(GL_LINEAR);
 		prepassViewSpaceNormalTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
 		tileMinTexture = new GLTexture2D();
-		tileMinTexture->Load(GL_R32F, nullptr, WINDOW_WIDTH / TILE_SIZE, WINDOW_HEIGHT / TILE_SIZE, GL_RED, GL_FLOAT);
+		tileMinTexture->Load(GL_R32F, nullptr, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE, GL_RED, GL_FLOAT);
 		tileMinTexture->SetMinMagFilter(GL_LINEAR);
 		tileMinTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
 		tileMaxTexture = new GLTexture2D();
-		tileMaxTexture->Load(GL_R32F, nullptr, WINDOW_WIDTH / TILE_SIZE, WINDOW_HEIGHT / TILE_SIZE, GL_RED, GL_FLOAT);
+		tileMaxTexture->Load(GL_R32F, nullptr, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE, GL_RED, GL_FLOAT);
 		tileMaxTexture->SetMinMagFilter(GL_LINEAR);
 		tileMaxTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
@@ -248,7 +250,7 @@ int main()
 		/// Depth buffer
 		GLCall(glGenRenderbuffers(1, &prepassDepthbuffer));
 		GLCall(glBindRenderbuffer(GL_RENDERBUFFER, prepassDepthbuffer));
-		GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, WINDOW_WIDTH, WINDOW_HEIGHT));
+		GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, g_WindowWidth, g_WindowHeight));
 
 		/// Framebuffers
 		GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
@@ -325,6 +327,14 @@ int main()
 		simpleShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/simple_fs.glsl");
 		simpleShader->CompileShaders();
 
+		std::shared_ptr<GLShader> m_SimpleShader = std::make_shared<GLShader>();
+		m_SimpleShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/simple_vs.glsl");
+		m_SimpleShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/simple_fs.glsl");
+		m_SimpleShader->CompileShaders();
+
+		/// Render techniques
+		g_ForwardRendering.AddRenderPass(std::make_shared<ForwardPrepass>(m_SimpleShader));
+
 		while (!glfwWindowShouldClose(window))
 		{
 			current = std::chrono::high_resolution_clock::now();
@@ -370,6 +380,14 @@ int main()
 			// Render
 			//g_CurrentRenderTechnique->Render();
 
+			for (int x = 0; x < CUBE_GRID_SIZE; x++)
+				for (int y = 0; y < CUBE_GRID_SIZE; y++)
+					g_ForwardRendering.Render(cubeGrid[x][y], renderer, *simpleShader);
+			g_ForwardRendering.Render(planeMesh, renderer, *simpleShader);
+			g_ForwardRendering.Render();
+
+
+#if 0
 			switch (renderMode)
 			{
 			case NONE:
@@ -398,6 +416,7 @@ int main()
 				RenderTiledDeferred(cubeGrid, planeMesh);
 				break;
 			}
+#endif
 			
 #ifdef USE_IMGUI
 			ImGuiRender();
@@ -429,7 +448,7 @@ int Init()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-	window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "TiledShading", NULL, NULL);
+	window = glfwCreateWindow(g_WindowWidth, g_WindowHeight, "TiledShading", NULL, NULL);
 	if (!window)
 	{
 		std::printf("Failed to create glfwWindow!\n");
@@ -510,7 +529,7 @@ void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const Plan
 
 void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
-	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
+	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -532,7 +551,7 @@ void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 
 	GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 
-	GLCall(glViewport(0, 0, WINDOW_WIDTH / TILE_SIZE, WINDOW_HEIGHT / TILE_SIZE));
+	GLCall(glViewport(0, 0, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, tileFramebuffer));
 	tileMinMaxShader->Bind();
 	tileMinMaxShader->SetUniform1i("u_TileSize", TILE_SIZE);
@@ -541,7 +560,7 @@ void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 	fullscreenIBO->Bind();
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 
-	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
+	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClearColor(0.8f, 0.2f, 0.2f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -554,7 +573,7 @@ void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 
 void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
-	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
+	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -576,7 +595,7 @@ void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 
 	GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 
-	GLCall(glViewport(0, 0, WINDOW_WIDTH / TILE_SIZE, WINDOW_HEIGHT / TILE_SIZE));
+	GLCall(glViewport(0, 0, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, tileFramebuffer));
 	tileMinMaxShader->Bind();
 	tileMinMaxShader->SetUniform1i("u_TileSize", TILE_SIZE);
@@ -585,7 +604,7 @@ void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 	fullscreenIBO->Bind();
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 
-	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
+	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClearColor(0.8f, 0.2f, 0.2f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -627,7 +646,7 @@ void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], con
 
 void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
-	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
+	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -639,8 +658,8 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 
 	float lightRadius = lightRadiusMultiplier * 10.0f * sqrt(lightIntensity);
 
-	float tileMin[WINDOW_WIDTH * WINDOW_HEIGHT / (TILE_SIZE * TILE_SIZE)];
-	float tileMax[WINDOW_WIDTH * WINDOW_HEIGHT / (TILE_SIZE * TILE_SIZE)];
+	float tileMin[g_WindowWidth * g_WindowHeight / (TILE_SIZE * TILE_SIZE)];
+	float tileMax[g_WindowWidth * g_WindowHeight / (TILE_SIZE * TILE_SIZE)];
 
 	tileMinTexture->Bind();
 	GLCall(glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, tileMin));
@@ -675,11 +694,11 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 					if (dTop < -lightRadius)
 						continue;
 
-					float dNear = viewSpacePosition.z - tileMax[row * (WINDOW_WIDTH / TILE_SIZE) + col];
+					float dNear = viewSpacePosition.z - tileMax[row * (g_WindowWidth / TILE_SIZE) + col];
 					if (dNear > lightRadius)
 						continue;
 
-					float dFar = viewSpacePosition.z - tileMin[row * (WINDOW_WIDTH / TILE_SIZE) + col];
+					float dFar = viewSpacePosition.z - tileMin[row * (g_WindowWidth / TILE_SIZE) + col];
 					if (dFar > lightRadius)
 						continue;
 
@@ -710,7 +729,7 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 	lightIndexSSBO->SetData(lightIndices.data(), lightIndices.size() * sizeof(int));
 	tileIndexSSBO->SetData(tileLightIndices, sizeof(tileLightIndices));
 
-	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
+	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
