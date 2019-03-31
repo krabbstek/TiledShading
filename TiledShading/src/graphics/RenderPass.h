@@ -4,21 +4,16 @@
 
 #include <vector>
 
-struct RenderableArgs
-{
-	const Renderable* renderable;
-	const Renderer* renderer;
-	GLShader* shader;
-
-	RenderableArgs(const Renderable* renderable, const Renderer* renderer, GLShader* shader)
-		: renderable(renderable), renderer(renderer), shader(shader) {}
-};
-
 class RenderPass
 {
 public:
-	RenderPass() {}
+	RenderPass(Renderer& renderer, std::shared_ptr<GLShader> shader)
+		: m_Renderer(renderer), m_Shader(shader) {}
 	virtual ~RenderPass() {}
 
-	virtual void Render(std::vector<RenderableArgs>& renderables);
+	virtual void Render(std::vector<Renderable*>& renderables);
+
+protected:
+	Renderer& m_Renderer;
+	std::shared_ptr<GLShader> m_Shader;
 };

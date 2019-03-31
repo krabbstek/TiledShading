@@ -1,7 +1,7 @@
 #pragma once
 
-constexpr unsigned int g_WindowWidth = 1280;
-constexpr unsigned int g_WindowHeight = 720;
-constexpr unsigned int TILE_SIZE = 40;
-constexpr int tileCols = g_WindowWidth / TILE_SIZE;
-constexpr int tileRows = g_WindowHeight / TILE_SIZE;
+#include "ConstExpr.h"
+
+#include "graphics/Light.h"
+
+extern Light g_LightGrid[g_LightGridSize][g_LightGridSize];

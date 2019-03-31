@@ -8,7 +8,9 @@
 #include "meshes/Cube.h"
 #include "meshes/PlaneMesh.h"
 #include "graphics/RenderTechnique.h"
-#include "graphics/renderpasses/ForwardPrepass.h"
+#include "graphics/renderpasses/forward/ForwardPrepass.h"
+#include "graphics/renderpasses/deferred/DeferredPrepass.h"
+#include "graphics/renderpasses/deferred/DeferredLightingPass.h"
 
 #include <chrono>
 #include <iostream>
@@ -21,13 +23,6 @@
 #include <stb_image.h>
 
 #define USE_IMGUI
-
-
-
-constexpr int CUBE_GRID_SIZE = 9;
-constexpr int LIGHT_GRID_SIZE = 30;
-
-constexpr float fov = DegToRad(75.0f);
 
 enum RENDER_MODE
 {
@@ -45,11 +40,9 @@ float currentTime;
 std::vector<Plane> leftPlanes, rightPlanes, bottomPlanes, topPlanes;
 std::vector<std::pair<unsigned int, unsigned int>> tileLights[tileRows][tileCols];
 std::vector<int> lightIndices;
-int tileLightIndices[2 * g_WindowWidth * g_WindowHeight / (TILE_SIZE * TILE_SIZE)];
+int tileLightIndices[2 * g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
 
 RENDER_MODE renderMode = TILED_DEFERRED;
-
-Light lights[LIGHT_GRID_SIZE][LIGHT_GRID_SIZE];
 
 float fullscreenVertices[] =
 {
@@ -75,7 +68,8 @@ GLFWwindow* window;
 Renderer renderer;
 
 /// Render techniques
-RenderTechnique g_ForwardRendering;
+std::shared_ptr<RenderTechnique> g_ForwardRendering;
+std::shared_ptr<RenderTechnique> g_DeferredRendering;
 
 /// Framebuffers
 GLuint defaultFramebuffer = 0;
@@ -120,16 +114,17 @@ mat4 modelMatrix;
 Material material;
 
 int Init();
-void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
-void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
-void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
-void RenderNonTiledDeferred(Cube (&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
-void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
+void InitDeferredRendering();
+void RenderDepthOnly(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
+void RenderTileMinDepth(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
+void RenderTileMaxDepth(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
+void RenderNonTiledDeferred(Cube (&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
+void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
 void ImGuiRender();
 
 int main()
 {
-	static_assert(!((g_WindowWidth % TILE_SIZE) | (g_WindowHeight % TILE_SIZE)));
+	static_assert(!((g_WindowWidth % g_TileSize) | (g_WindowHeight % g_TileSize)));
 
 	start = std::chrono::high_resolution_clock::now();
 
@@ -137,7 +132,7 @@ int main()
 	if (initResult)
 		return initResult;
 
-	float fovPerTile = fov / float(tileRows);
+	float fovPerTile = g_FOV / float(tileRows);
 	float halfFovPerTile = 0.5f * fovPerTile;
 
 	leftPlanes.push_back(Plane(cos(halfFovPerTile * -tileCols), 0.0f, sin(halfFovPerTile * -tileCols), 0.0f));
@@ -171,27 +166,27 @@ int main()
 	topPlanes.push_back(Plane(vec3(0.0f, -cos(halfFovPerTile * tileCols), -sin(halfFovPerTile * tileCols)), 0));
 
 	{
-		renderer.camera.projectionMatrix = mat4::Perspective(fov, float(g_WindowWidth) / float(g_WindowHeight), 0.1f, 100.0f);
+		renderer.camera.projectionMatrix = mat4::Perspective(g_FOV, float(g_WindowWidth) / float(g_WindowHeight), 0.1f, 100.0f);
 		renderer.camera.position = vec3(0.0f, 4.0f, 12.0f);
 		renderer.camera.rotation = vec3(-0.4f, 0.0f, 0.0f);
 		mat4 V = renderer.camera.GetViewMatrix();
 
-		Cube cubeGrid[CUBE_GRID_SIZE][CUBE_GRID_SIZE];
-		for (int x = 0; x < CUBE_GRID_SIZE; x++)
-			for (int z = 0; z < CUBE_GRID_SIZE; z++)
+		Cube cubeGrid[g_CubeGridSize][g_CubeGridSize];
+		for (int x = 0; x < g_CubeGridSize; x++)
+			for (int z = 0; z < g_CubeGridSize; z++)
 				cubeGrid[x][z].position = vec3(2.0f * (x - 4.0f), 0.0f, 2.0f * (z - 4.0f));
 		PlaneMesh planeMesh({ 0.0f, -0.5f, 0.0f }, { 24.0f, 24.0f });
 
-		for (int x = 0; x < LIGHT_GRID_SIZE; x++)
+		for (int x = 0; x < g_LightGridSize; x++)
 		{
-			for (int z = 0; z < LIGHT_GRID_SIZE; z++)
+			for (int z = 0; z < g_LightGridSize; z++)
 			{
-				lights[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
-				vec4 position = vec4(lightGridScale.x * (x - (LIGHT_GRID_SIZE - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (LIGHT_GRID_SIZE - 1) / 2) + lightGridOffset.z, 1.0f);
-				lights[x][z].viewSpacePosition = V * position;
+				g_LightGrid[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
+				vec4 position = vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
+				g_LightGrid[x][z].viewSpacePosition = V * position;
 			}
 		}
-		lightSSBO = new GLShaderStorageBuffer(lights, sizeof(lights));
+		lightSSBO = new GLShaderStorageBuffer(g_LightGrid, sizeof(g_LightGrid));
 		lightIndexSSBO = new GLShaderStorageBuffer(0, 0);
 		tileIndexSSBO = new GLShaderStorageBuffer(0, 0);
 
@@ -233,12 +228,12 @@ int main()
 		prepassViewSpaceNormalTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
 		tileMinTexture = new GLTexture2D();
-		tileMinTexture->Load(GL_R32F, nullptr, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE, GL_RED, GL_FLOAT);
+		tileMinTexture->Load(GL_R32F, nullptr, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize, GL_RED, GL_FLOAT);
 		tileMinTexture->SetMinMagFilter(GL_LINEAR);
 		tileMinTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
 		tileMaxTexture = new GLTexture2D();
-		tileMaxTexture->Load(GL_R32F, nullptr, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE, GL_RED, GL_FLOAT);
+		tileMaxTexture->Load(GL_R32F, nullptr, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize, GL_RED, GL_FLOAT);
 		tileMaxTexture->SetMinMagFilter(GL_LINEAR);
 		tileMaxTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
@@ -333,8 +328,13 @@ int main()
 		m_SimpleShader->CompileShaders();
 
 		/// Render techniques
-		g_ForwardRendering.AddRenderPass(std::make_shared<ForwardPrepass>(m_SimpleShader));
+		{
+			// Forward non-tiled rendering
+			g_ForwardRendering = std::make_shared<RenderTechnique>();
+			g_ForwardRendering->AddRenderPass(std::make_shared<ForwardPrepass>(renderer, m_SimpleShader));
 
+			InitDeferredRendering();
+		}
 		while (!glfwWindowShouldClose(window))
 		{
 			current = std::chrono::high_resolution_clock::now();
@@ -353,39 +353,41 @@ int main()
 
 			if (dynamicLights)
 			{
-				for (int x = 0; x < LIGHT_GRID_SIZE; x++)
+				for (int x = 0; x < g_LightGridSize; x++)
 				{
-					for (int z = 0; z < LIGHT_GRID_SIZE; z++)
+					for (int z = 0; z < g_LightGridSize; z++)
 					{
-						lights[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
-						vec4 position = vec4(0.5f * (s - 1.0f) * lightGridScale.x * (x - (LIGHT_GRID_SIZE - 1) / 2) + lightGridOffset.x, lightGridOffset.y, 0.5f * (s - 1.0f) * lightGridScale.y * (z - (LIGHT_GRID_SIZE - 1) / 2) + lightGridOffset.z, 1.0f);
-						lights[x][z].viewSpacePosition = V * position;
+						g_LightGrid[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
+						vec4 position = vec4(0.5f * (s - 1.0f) * lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, 0.5f * (s - 1.0f) * lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
+						g_LightGrid[x][z].viewSpacePosition = V * position;
 					}
 				}
 			}
 			else
 			{
-				for (int x = 0; x < LIGHT_GRID_SIZE; x++)
+				for (int x = 0; x < g_LightGridSize; x++)
 				{
-					for (int z = 0; z < LIGHT_GRID_SIZE; z++)
+					for (int z = 0; z < g_LightGridSize; z++)
 					{
-						lights[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
-						vec4 position = vec4(lightGridScale.x * (x - (LIGHT_GRID_SIZE - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (LIGHT_GRID_SIZE - 1) / 2) + lightGridOffset.z, 1.0f);
-						lights[x][z].viewSpacePosition = V * position;
+						g_LightGrid[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
+						vec4 position = vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
+						g_LightGrid[x][z].viewSpacePosition = V * position;
 					}
 				}
 			}
-			lightSSBO->SetData(lights, sizeof(lights));
+			lightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
 
 			// Render
 			//g_CurrentRenderTechnique->Render();
 
-			for (int x = 0; x < CUBE_GRID_SIZE; x++)
+			/*for (int x = 0; x < CUBE_GRID_SIZE; x++)
 				for (int y = 0; y < CUBE_GRID_SIZE; y++)
-					g_ForwardRendering.Render(cubeGrid[x][y], renderer, *simpleShader);
-			g_ForwardRendering.Render(planeMesh, renderer, *simpleShader);
-			g_ForwardRendering.Render();
+					g_ForwardRendering.Render(cubeGrid[x][y]);
+			g_ForwardRendering.Render(planeMesh);
+			g_ForwardRendering.Render();*/
 
+			g_DeferredRendering->Render(planeMesh);
+			g_DeferredRendering->Render();
 
 #if 0
 			switch (renderMode)
@@ -427,6 +429,9 @@ int main()
 			glfwSwapBuffers(window);
 		}
 	}
+
+	g_ForwardRendering.reset();
+	g_DeferredRendering.reset();
 
 	ImGui_ImplGlfw_Shutdown();
 
@@ -514,7 +519,7 @@ void ImGuiRender()
 }
 
 
-void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
+void RenderDepthOnly(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh)
 {
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
@@ -527,14 +532,14 @@ void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const Plan
 	planeMesh.Render(renderer, *depthShader);
 }
 
-void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
+void RenderTileMinDepth(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh)
 {
 	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
-	prepassShader->SetUniform1i("u_TileSize", TILE_SIZE);
+	prepassShader->SetUniform1i("u_TileSize", g_TileSize);
 
 	GLCall(glBindImageTexture(0, tileMinTexture->RendererID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI));
 	GLCall(glBindImageTexture(1, tileMaxTexture->RendererID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI));
@@ -551,10 +556,10 @@ void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 
 	GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 
-	GLCall(glViewport(0, 0, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE));
+	GLCall(glViewport(0, 0, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, tileFramebuffer));
 	tileMinMaxShader->Bind();
-	tileMinMaxShader->SetUniform1i("u_TileSize", TILE_SIZE);
+	tileMinMaxShader->SetUniform1i("u_TileSize", g_TileSize);
 	prepassViewSpacePositionTexture->Bind();
 	fullscreenVAO->Bind();
 	fullscreenIBO->Bind();
@@ -571,14 +576,14 @@ void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 }
 
-void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
+void RenderTileMaxDepth(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh)
 {
 	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
-	prepassShader->SetUniform1i("u_TileSize", TILE_SIZE);
+	prepassShader->SetUniform1i("u_TileSize", g_TileSize);
 
 	GLCall(glBindImageTexture(0, tileMinTexture->RendererID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI));
 	GLCall(glBindImageTexture(1, tileMaxTexture->RendererID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI));
@@ -595,10 +600,10 @@ void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 
 	GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 
-	GLCall(glViewport(0, 0, g_WindowWidth / TILE_SIZE, g_WindowHeight / TILE_SIZE));
+	GLCall(glViewport(0, 0, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, tileFramebuffer));
 	tileMinMaxShader->Bind();
-	tileMinMaxShader->SetUniform1i("u_TileSize", TILE_SIZE);
+	tileMinMaxShader->SetUniform1i("u_TileSize", g_TileSize);
 	prepassViewSpacePositionTexture->Bind();
 	fullscreenVAO->Bind();
 	fullscreenIBO->Bind();
@@ -610,13 +615,13 @@ void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const P
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 	tileMaxTexture->Bind();
 	tileDepthShader->Bind();
-	tileDepthShader->SetUniform1i("u_TileSize", TILE_SIZE);
+	tileDepthShader->SetUniform1i("u_TileSize", g_TileSize);
 	fullscreenVAO->Bind();
 	fullscreenIBO->Bind();
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 }
 
-void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
+void RenderNonTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh)
 {
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
@@ -644,7 +649,7 @@ void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], con
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 }
 
-void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
+void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh)
 {
 	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
@@ -658,8 +663,8 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 
 	float lightRadius = lightRadiusMultiplier * 10.0f * sqrt(lightIntensity);
 
-	float tileMin[g_WindowWidth * g_WindowHeight / (TILE_SIZE * TILE_SIZE)];
-	float tileMax[g_WindowWidth * g_WindowHeight / (TILE_SIZE * TILE_SIZE)];
+	float tileMin[g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
+	float tileMax[g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
 
 	tileMinTexture->Bind();
 	GLCall(glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, tileMin));
@@ -670,13 +675,13 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 		for (int row = 0; row < tileRows; row++)
 			tileLights[row][col].clear();
 
-	for (int lightX = 0; lightX < LIGHT_GRID_SIZE; lightX++)
+	for (int lightX = 0; lightX < g_LightGridSize; lightX++)
 	{
-		for (int lightZ = 0; lightZ < LIGHT_GRID_SIZE; lightZ++)
+		for (int lightZ = 0; lightZ < g_LightGridSize; lightZ++)
 		{
 			for (int col = 0; col < tileCols; col++)
 			{
-				const vec3& viewSpacePosition = lights[lightX][lightZ].viewSpacePosition;
+				const vec3& viewSpacePosition = g_LightGrid[lightX][lightZ].viewSpacePosition;
 
 				float dLeft = leftPlanes[col].Distance(viewSpacePosition);
 				if (dLeft < -lightRadius)
@@ -694,11 +699,11 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 					if (dTop < -lightRadius)
 						continue;
 
-					float dNear = viewSpacePosition.z - tileMax[row * (g_WindowWidth / TILE_SIZE) + col];
+					float dNear = viewSpacePosition.z - tileMax[row * (g_WindowWidth / g_TileSize) + col];
 					if (dNear > lightRadius)
 						continue;
 
-					float dFar = viewSpacePosition.z - tileMin[row * (g_WindowWidth / TILE_SIZE) + col];
+					float dFar = viewSpacePosition.z - tileMin[row * (g_WindowWidth / g_TileSize) + col];
 					if (dFar > lightRadius)
 						continue;
 
@@ -720,7 +725,7 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 			for (int i = 0; i < size; i++)
 			{
 				std::pair<int, int> ind = tileLights[row][col][i];
-				lightIndices.emplace_back(ind.first * LIGHT_GRID_SIZE + ind.second);
+				lightIndices.emplace_back(ind.first * g_LightGridSize + ind.second);
 			}
 		}
 	}
@@ -739,7 +744,7 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 	lightingTiledShader->SetUniform1f("u_Material.shininess", material.shininess);
 	lightingTiledShader->SetUniform1f("u_Material.metalness", material.metalness);
 	lightingTiledShader->SetUniform1f("u_Material.fresnel", material.fresnel);
-	lightingTiledShader->SetUniform1i("u_TileSize", TILE_SIZE);
+	lightingTiledShader->SetUniform1i("u_TileSize", g_TileSize);
 	lightingTiledShader->SetUniform1i("u_NumTileCols", tileCols);
 
 	prepassAlbedoTexture->Bind(0);
@@ -751,4 +756,47 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const 
 	fullscreenVAO->Bind();
 	fullscreenIBO->Bind();
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
+}
+
+
+void InitDeferredRendering()
+{
+	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
+	viewSpacePositionTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
+	viewSpacePositionTexture->SetMinMagFilter(GL_NEAREST);
+	viewSpacePositionTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLTexture2D> viewSpaceNormalTexture = std::make_shared<GLTexture2D>();
+	viewSpaceNormalTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
+	viewSpaceNormalTexture->SetMinMagFilter(GL_NEAREST);
+	viewSpaceNormalTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLShader> deferredPrepassShader = std::make_shared<GLShader>();
+	deferredPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/deferred_prepass_vs.glsl");
+	deferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/deferred_prepass_fs.glsl");
+	deferredPrepassShader->CompileShaders();
+
+	std::shared_ptr<GLShader> deferredLightingPassShader = std::make_shared<GLShader>();
+	deferredLightingPassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/deferred_lighting_pass_vs.glsl");
+	deferredLightingPassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/deferred_lighting_pass_fs.glsl");
+	deferredLightingPassShader->CompileShaders();
+
+	std::shared_ptr<DeferredPrepass> deferredPrepass = std::make_shared<DeferredPrepass>(
+		renderer,
+		deferredPrepassShader,
+		viewSpacePositionTexture,
+		viewSpaceNormalTexture
+	);
+
+	std::shared_ptr<DeferredLightingPass> deferredLightingPass = std::make_shared<DeferredLightingPass>(
+		renderer,
+		deferredLightingPassShader,
+		viewSpacePositionTexture,
+		viewSpaceNormalTexture,
+		material
+	);
+
+	g_DeferredRendering = std::make_shared<RenderTechnique>();
+	g_DeferredRendering->AddRenderPass(deferredPrepass);
+	g_DeferredRendering->AddRenderPass(deferredLightingPass);
 }

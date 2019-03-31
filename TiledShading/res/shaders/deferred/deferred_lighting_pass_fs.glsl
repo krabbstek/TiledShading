@@ -4,9 +4,8 @@
 
 out vec3 out_Color;
 
-layout (binding = 0) uniform sampler2D u_Albedo;
-layout (binding = 1) uniform sampler2D u_ViewSpacePosition;
-layout (binding = 2) uniform sampler2D u_ViewSpaceNormal;
+layout (binding = 0) uniform sampler2D u_ViewSpacePosition;
+layout (binding = 1) uniform sampler2D u_ViewSpaceNormal;
 
 uniform struct Material
 {
@@ -59,6 +58,7 @@ void main()
 	vec3 n = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
 
 	uint numLights = lights.length();
+
 	for (int i = 0; i < numLights; i++)
 	{
 		vec3 wi = lights[i].viewSpacePosition.xyz - viewSpacePosition;
@@ -90,4 +90,6 @@ void main()
 
 		out_Color += u_Material.reflectivity * microfacetTerm + (1.0 - u_Material.reflectivity) * diffuse_term;
 	}
+
+	out_Color = n;
 }
