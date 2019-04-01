@@ -71,12 +71,14 @@ bool GLTexture2D::LoadFromFile(const char* filePath)
 
 void GLTexture2D::SetWrapS(GLuint parameter) const
 {
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_S, parameter));
+	Bind();
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, parameter));
 }
 
 void GLTexture2D::SetWrapT(GLuint parameter) const
 {
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_T, parameter));
+	Bind();
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, parameter));
 }
 
 void GLTexture2D::SetWrapST(GLuint parameter) const
@@ -88,12 +90,14 @@ void GLTexture2D::SetWrapST(GLuint parameter) const
 
 void GLTexture2D::SetMinFilter(GLuint parameter) const
 {
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_MIN_FILTER, parameter));
+	Bind();
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, parameter));
 }
 
 void GLTexture2D::SetMagFilter(GLuint parameter) const
 {
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_MAG_FILTER, parameter));
+	Bind();
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, parameter));
 }
 
 void GLTexture2D::SetMinMagFilter(GLuint parameter) const

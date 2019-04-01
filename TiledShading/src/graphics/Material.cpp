@@ -10,5 +10,5 @@ void Material::Bind(GLShader& shader) const
 	shader.SetUniform1f("u_Material.metalness", metalness);
 	shader.SetUniform1f("u_Material.fresnel", fresnel);
 	shader.SetUniform1i("u_TileSize", g_TileSize);
-	shader.SetUniform1i("u_NumTileCols", tileCols);
+	shader.SetUniform1i("u_NumTileCols", g_NumTileCols);
 }
