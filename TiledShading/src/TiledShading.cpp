@@ -401,6 +401,9 @@ int main()
 
 #else
 
+			GLTimer timer;
+			timer.Start();
+
 			switch (renderMode)
 			{
 			case NONE:
@@ -429,6 +432,9 @@ int main()
 				RenderTiledDeferred(cubeGrid, planeMesh);
 				break;
 			}
+
+			timer.Stop();
+			std::printf("%d\n", timer.GetTime());
 #endif
 			
 #ifdef USE_IMGUI
