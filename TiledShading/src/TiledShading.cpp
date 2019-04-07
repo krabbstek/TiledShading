@@ -14,7 +14,10 @@
 #include "graphics/renderpasses/forward/ForwardPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredLightingPass.h"
-#include "graphics/renderpasses/deferred/TiledDeferredPrepass.h"
+#include "graphics/renderpasses/deferred/tiled/TiledDeferredClearTileMinMaxDepthPass.h"
+#include "graphics/renderpasses/deferred/tiled/TiledDeferredPrepass.h"
+#include "graphics/renderpasses/deferred/tiled/TiledDeferredComputeLightTilesPass.h"
+#include "graphics/renderpasses/deferred/tiled/TiledDeferredLightingPass.h"
 
 #include <chrono>
 #include <iostream>
@@ -63,8 +66,6 @@ unsigned int fullscreenIndices[] =
 
 vec3 lightGridOffset = vec3(0.0f, 0.6f, 0.0f);
 vec2 lightGridScale = vec2(0.7f); //(3.5f);
-float lightIntensity = 0.1f; // 3.0f;
-float lightRadiusMultiplier = 1.0f;
 bool dynamicLights = true;
 
 GLFWwindow* window;
@@ -184,7 +185,7 @@ int main()
 		{
 			for (int z = 0; z < g_LightGridSize; z++)
 			{
-				g_LightGrid[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
+				g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier, g_LightIntensityMultiplier, g_LightIntensityMultiplier, 1.0f);
 				vec4 position = vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
 				g_LightGrid[x][z].viewSpacePosition = V * position;
 			}
@@ -363,7 +364,7 @@ int main()
 				{
 					for (int z = 0; z < g_LightGridSize; z++)
 					{
-						g_LightGrid[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
+						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier, g_LightIntensityMultiplier, g_LightIntensityMultiplier, 1.0f);
 						vec4 position = vec4(0.5f * (s - 1.0f) * lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, 0.5f * (s - 1.0f) * lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
 						g_LightGrid[x][z].viewSpacePosition = V * position;
 					}
@@ -375,7 +376,7 @@ int main()
 				{
 					for (int z = 0; z < g_LightGridSize; z++)
 					{
-						g_LightGrid[x][z].color = vec4(lightIntensity, lightIntensity, lightIntensity, 1.0f);
+						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier, g_LightIntensityMultiplier, g_LightIntensityMultiplier, 1.0f);
 						vec4 position = vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
 						g_LightGrid[x][z].viewSpacePosition = V * position;
 					}
@@ -393,8 +394,8 @@ int main()
 			//g_ForwardRendering->Render(planeMesh);
 			//g_ForwardRendering->Render();
 
-			g_DeferredRendering->Render(planeMesh);
-			g_DeferredRendering->Render();
+			g_TiledDeferredRendering->Render(planeMesh);
+			g_TiledDeferredRendering->Render();
 
 #if 0
 			for (int x = 0; x < g_CubeGridSize; x++)
@@ -480,7 +481,7 @@ int Init()
 	}
 
 	glfwMakeContextCurrent(window);
-	glfwSwapInterval(0);
+	glfwSwapInterval(1);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -519,8 +520,8 @@ void ImGuiRender()
 
 	ImGui::Text("Light");
 	ImGui::Checkbox("Dynamic lights", &dynamicLights);
-	ImGui::SliderFloat("Light intensity", &lightIntensity, 0.0f, 100.0f, "%.2f", 3.0f);
-	ImGui::SliderFloat("Light radius multiplier", &lightRadiusMultiplier, 0.0f, 100.0f, "%.1f", 3.0f);
+	ImGui::SliderFloat("Light intensity multiplier", &g_LightIntensityMultiplier, 0.0f, 100.0f, "%.2f", 3.0f);
+	ImGui::SliderFloat("Light falloff threshold", &g_LightFalloffThreshold, 0.001f, 0.1f, "%.3f", 2.0f);
 	ImGui::SliderFloat3("Light grid offset", &lightGridOffset.x, -3.0f, 3.0f, "%.1f", 1.0f);
 	ImGui::SliderFloat2("Light grid scale", &lightGridScale.x, 0.0f, 10.0f, "%.1f", 1.0f);
 
@@ -679,7 +680,8 @@ void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const 
 			cubeGrid[x][z].Render(renderer, *prepassShader);
 	planeMesh.Render(renderer, *prepassShader);
 
-	float lightRadius = lightRadiusMultiplier * 10.0f * sqrt(lightIntensity);
+	//float lightRadius = lightRadiusMultiplier * 10.0f * sqrt(lightIntensity);
+	float lightRadius = sqrt(g_LightIntensityMultiplier / g_LightFalloffThreshold);
 
 	float tileMin[g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
 	float tileMax[g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
@@ -834,18 +836,18 @@ void InitDeferredRendering()
 
 	std::shared_ptr<GLTimer> totalRenderTimer = std::make_shared<GLTimer>();
 
-	std::shared_ptr<StartGLTimerPass> startGLTimerPass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
-	std::shared_ptr<StopGLTimerPass> stopGLTimerPass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StartGLTimerPass> startTotalRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopGLTimerPass> stopTotalRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
 	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
 
 	g_DeferredRendering = std::make_shared<RenderTechnique>();
 	g_DeferredRendering->AddRenderPass(plotTimersPass);
-	g_DeferredRendering->AddRenderPass(startGLTimerPass);
+	g_DeferredRendering->AddRenderPass(startTotalRenderTimePass);
 	g_DeferredRendering->AddRenderPass(deferredPrepass);
 	g_DeferredRendering->AddRenderPass(deferredLightingPass);
-	g_DeferredRendering->AddRenderPass(stopGLTimerPass);
+	g_DeferredRendering->AddRenderPass(stopTotalRenderTimePass);
 }
 
 void InitTiledDeferredRendering()
@@ -860,33 +862,71 @@ void InitTiledDeferredRendering()
 	viewSpaceNormalTexture->SetMinMagFilter(GL_NEAREST);
 	viewSpaceNormalTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
-	std::shared_ptr<GLImageTexture2D> tileMinImageTexture = std::make_shared<GLImageTexture2D>(GL_R32I, GL_READ_WRITE, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize);
-	tileMinImageTexture->SetMinMagFilter(GL_NEAREST);
-	tileMinImageTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+	std::shared_ptr<GLImageTexture2D> tileMinDepthImageTexture = std::make_shared<GLImageTexture2D>(GL_R32I, GL_READ_WRITE, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize);
+	tileMinDepthImageTexture->SetMinMagFilter(GL_NEAREST);
+	tileMinDepthImageTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
-	std::shared_ptr<GLImageTexture2D> tileMaxImageTexture = std::make_shared<GLImageTexture2D>(GL_R32I, GL_READ_WRITE, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize);
-	tileMaxImageTexture->SetMinMagFilter(GL_NEAREST);
-	tileMaxImageTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+	std::shared_ptr<GLImageTexture2D> tileMaxDepthImageTexture = std::make_shared<GLImageTexture2D>(GL_R32I, GL_READ_WRITE, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize);
+	tileMaxDepthImageTexture->SetMinMagFilter(GL_NEAREST);
+	tileMaxDepthImageTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, 0);
+	std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, 0);
+
+	std::shared_ptr<GLShader> tiledDeferredClearTileMinMaxDepthShader = std::make_shared<GLShader>();
+	tiledDeferredClearTileMinMaxDepthShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/tiled/tiled_deferred_clear_tile_min_max_depth_vs.glsl");
+	tiledDeferredClearTileMinMaxDepthShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled/tiled_deferred_clear_tile_min_max_depth_fs.glsl");
+	tiledDeferredClearTileMinMaxDepthShader->CompileShaders();
 
 	std::shared_ptr<GLShader> tiledDeferredPrepassShader = std::make_shared<GLShader>();
-	tiledDeferredPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/tiled_deferred_prepass_vs.glsl");
-	tiledDeferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled_deferred_prepass_fs.glsl");
+	tiledDeferredPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/tiled/tiled_deferred_prepass_vs.glsl");
+	tiledDeferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled/tiled_deferred_prepass_fs.glsl");
 	tiledDeferredPrepassShader->CompileShaders();
 
-	//std::shared_ptr<GLShader> deferredLightingPassShader = std::make_shared<GLShader>();
-	//deferredLightingPassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/deferred_lighting_pass_vs.glsl");
-	//deferredLightingPassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/deferred_lighting_pass_fs.glsl");
-	//deferredLightingPassShader->CompileShaders();
+	std::shared_ptr<GLShader> tiledDeferredLightingPassShader = std::make_shared<GLShader>();
+	tiledDeferredLightingPassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/tiled/tiled_deferred_lighting_pass_vs.glsl");
+	tiledDeferredLightingPassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled/tiled_deferred_lighting_pass_fs.glsl");
+	tiledDeferredLightingPassShader->CompileShaders();
+	tiledDeferredLightingPassShader->SetUniform1i("u_NumTileCols", g_NumTileCols);
+	tiledDeferredLightingPassShader->SetUniform1i("u_TileSize", g_TileSize);
+
+	std::shared_ptr<TiledDeferredClearTileMinMaxDepthPass> tiledDeferredClearTileMinMaxDepthPass = std::make_shared<TiledDeferredClearTileMinMaxDepthPass>(
+		renderer,
+		tiledDeferredClearTileMinMaxDepthShader,
+		tileMinDepthImageTexture,
+		tileMaxDepthImageTexture
+	);
 
 	std::shared_ptr<TiledDeferredPrepass> tiledDeferredPrepass = std::make_shared<TiledDeferredPrepass>(
 		renderer,
 		tiledDeferredPrepassShader,
 		viewSpacePositionTexture,
 		viewSpaceNormalTexture,
-		tileMinImageTexture,
-		tileMaxImageTexture
+		tileMinDepthImageTexture,
+		tileMaxDepthImageTexture
+	);
+
+	std::shared_ptr<TiledDeferredComputeLightTilesPass> tiledDeferredComputeLightTilesPass = std::make_shared<TiledDeferredComputeLightTilesPass>(
+		renderer,
+		tileMinDepthImageTexture,
+		tileMaxDepthImageTexture,
+		lightIndexSSBO,
+		tileIndexSSBO
+	);
+
+	std::shared_ptr<TiledDeferredLightingPass> tiledDeferredLightingPass = std::make_shared<TiledDeferredLightingPass>(
+		renderer,
+		tiledDeferredLightingPassShader,
+		viewSpacePositionTexture,
+		viewSpaceNormalTexture,
+		lightIndexSSBO,
+		tileIndexSSBO,
+		material
 	);
 
 	g_TiledDeferredRendering = std::make_shared<RenderTechnique>();
+	g_TiledDeferredRendering->AddRenderPass(tiledDeferredClearTileMinMaxDepthPass);
 	g_TiledDeferredRendering->AddRenderPass(tiledDeferredPrepass);
+	g_TiledDeferredRendering->AddRenderPass(tiledDeferredComputeLightTilesPass);
+	g_TiledDeferredRendering->AddRenderPass(tiledDeferredLightingPass);
 }

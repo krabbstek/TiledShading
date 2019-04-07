@@ -18,6 +18,7 @@ public:
 	void SetMinMagFilter(GLuint parameter) const;
 
 	void Bind(unsigned int slot = 0) const;
+	void BindAsTexture(unsigned int slot = 0) const;
 	static void Unbind(unsigned int slot = 0);
 
 	inline unsigned int GetWidth() const { return m_Width; }

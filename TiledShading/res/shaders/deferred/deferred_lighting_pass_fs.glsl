@@ -1,4 +1,4 @@
-#version 450 core
+#version 430 core
 
 #define PI 3.141592653589793
 
@@ -6,6 +6,8 @@ out vec3 out_Color;
 
 layout (binding = 0) uniform sampler2D u_ViewSpacePosition;
 layout (binding = 1) uniform sampler2D u_ViewSpaceNormal;
+
+uniform float u_LightFalloffThreshold;
 
 uniform struct Material
 {
@@ -62,7 +64,7 @@ void main()
 	for (int i = 0; i < numLights; i++)
 	{
 		vec3 wi = lights[i].viewSpacePosition.xyz - viewSpacePosition;
-		float inv_d2 = 1.0 / dot(wi, wi);
+		float inv_d2 = max(1.0 / dot(wi, wi) - u_LightFalloffThreshold, 0.0);
 		wi = normalize(wi);
 		float n_wi = dot(n, wi);
 		if (n_wi <= 0.0)

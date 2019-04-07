@@ -63,6 +63,12 @@ void GLImageTexture2D::Bind(unsigned int slot) const
 	GLCall(glBindImageTexture(slot, m_RendererID, 0, GL_FALSE, 0, m_Access, m_StorageFormat));
 }
 
+void GLImageTexture2D::BindAsTexture(unsigned int slot) const
+{
+	GLCall(glActiveTexture(GL_TEXTURE0 + slot));
+	GLCall(glBindTexture(GL_TEXTURE_2D, m_RendererID));
+}
+
 void GLImageTexture2D::Unbind(unsigned int slot)
 {
 	GLCall(glBindImageTexture(slot, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32I));

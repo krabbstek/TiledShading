@@ -1,4 +1,4 @@
-#version 450 core
+#version 430 core
 
 in vec4 in_Position;
 

@@ -1,4 +1,4 @@
-#version 450 core
+#version 430 core
 
 in vec3 viewSpacePosition;
 in vec3 viewSpaceNormal;
@@ -21,5 +21,5 @@ void main()
 
 	int depth = int(viewSpacePosition.z * (float(0x7FFFFFFF) / u_FarDepth) + 0.5);
 	imageAtomicMin(u_TileMinImage, tileCoords, depth);
-	imageAtomicMax(u_TileMaxImage, tileCoords, -depth);
+	imageAtomicMax(u_TileMaxImage, tileCoords, depth);
 }

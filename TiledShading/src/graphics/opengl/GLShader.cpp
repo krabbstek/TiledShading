@@ -67,7 +67,7 @@ bool GLShader::CompileShaders()
 			{
 				GLCall(glDeleteShader(sh));
 			}
-			std::printf("Failed to compile shader (type {}): {}", a.first, info);
+			std::printf("Failed to compile shader (type %d): %s", a.first, info);
 			return false;
 		}
 
@@ -91,7 +91,7 @@ bool GLShader::CompileShaders()
 		{
 			GLCall(glDeleteShader(shader));
 		}
-		std::printf("Failed to link shaders: {}", info);
+		std::printf("Failed to link shaders: %s", info);
 		return false;
 	}
 

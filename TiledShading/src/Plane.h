@@ -8,6 +8,7 @@ struct Plane
 	float a, b, c, d;
 
 public:
+	Plane();
 	Plane(float a, float b, float c, float d);
 	Plane(const vec3& normal, float d);
 

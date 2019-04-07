@@ -4,9 +4,8 @@
 
 out vec3 out_Color;
 
-layout (binding = 0) uniform sampler2D u_Albedo;
-layout (binding = 1) uniform sampler2D u_ViewSpacePosition;
-layout (binding = 2) uniform sampler2D u_ViewSpaceNormal;
+layout (binding = 0) uniform sampler2D u_ViewSpacePosition;
+layout (binding = 1) uniform sampler2D u_ViewSpaceNormal;
 
 uniform struct Material
 {
@@ -17,6 +16,8 @@ uniform struct Material
 	float fresnel;
 } u_Material;
 
+uniform float u_LightFalloffThreshold;
+
 uniform int u_NumTileCols;
 uniform int u_TileSize;
 
@@ -26,29 +27,28 @@ struct Light
 	vec4 color;
 };
 
-struct LightIndex
+struct TileLightIndex
 {
 	int offset;
 	int count;
 };
 
-
-/// Lights, with position and color
+/// Lights, containing view space position and color
 layout (std430, binding = 3) buffer LightBuffer
 {
 	Light lights[];
 };
 
-/// Pure array of indices to the above lights
-layout (std430, binding = 4) buffer LightIndices
+/// Integer array containing pure indices to above lights
+layout (std430, binding = 4) buffer LightIndexBuffer
 {
 	int lightIndices[];
 };
 
-/// Tells shader where to look in lightIndices
-layout (std430, binding = 5) buffer LightTiles
+/// Integer array which tells shader where current tile's indices are located in lightIndices
+layout (std430, binding = 5) buffer TileBuffer
 {
-	LightIndex tileIndices[];
+	TileLightIndex tileIndices[];
 };
 
 
@@ -74,38 +74,42 @@ float brdf(float F, float D, float G, float n_wo, float n_wi)
 }
 
 
-int TileIndex(int col, int row)
+int TileIndex(int tileCol, int tileRow)
 {
-	return col + row * u_NumTileCols;
+	return tileCol + tileRow * u_NumTileCols;
 }
-
 
 void main()
 {
 	ivec2 texCoords = ivec2(gl_FragCoord.xy);
 
-	vec3 albedo = texelFetch(u_Albedo, texCoords, 0).rgb;
 	vec3 viewSpacePosition = texelFetch(u_ViewSpacePosition, texCoords, 0).rgb;
 	vec3 n = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
+	vec3 wo = -normalize(viewSpacePosition);
 
 	ivec2 tileCoords = texCoords / u_TileSize;
 	int index = TileIndex(tileCoords.x, tileCoords.y);
-	LightIndex lightIndex = tileIndices[index];
+	TileLightIndex tileIndex = tileIndices[index];
 
-	for (int i = 0; i < lightIndex.count; i++)
+	vec3 dielectricTerm = vec3(0.0);
+	vec3 metalTerm = vec3(0.0);
+	vec3 totalDiffuseTerm = vec3(0.0);
+
+	vec3 diffuseTermPreComp = u_Material.albedo.rgb * (1.0 / PI);
+
+	for (int i = 0; i < tileIndex.count; i++)
 	{
-		index = lightIndices[lightIndex.offset + i];
+		index = lightIndices[tileIndex.offset + i];
 		Light light = lights[index];
 
 		vec3 wi = light.viewSpacePosition.xyz - viewSpacePosition;
-		float inv_d2 = 1.0 / dot(wi, wi);
+		float inv_d2 = max(1.0 / dot(wi, wi) - u_LightFalloffThreshold, 0.0);
 		wi = normalize(wi);
 		float n_wi = dot(n, wi);
 		if (n_wi <= 0.0)
 			continue;
 
 		vec3 Li = light.color.rgb * inv_d2;
-		vec3 wo = -normalize(viewSpacePosition);
 		vec3 wh = normalize(wi + wo);
 
 		float n_wo = dot(n, wo);
@@ -119,11 +123,16 @@ void main()
 
 		float brdf = brdf(F, D, G, n_wo, n_wi);
 
-		vec3 diffuse_term = u_Material.albedo.rgb * (1.0 / PI) * n_wi * Li;
-		vec3 dielectricTerm = brdf * n_wi * Li + (1.0 - F) * diffuse_term;
-		vec3 metalTerm = brdf * u_Material.albedo.rgb * n_wi * Li;
-		vec3 microfacetTerm = u_Material.metalness * metalTerm + (1.0 - u_Material.metalness) * dielectricTerm;
+		vec3 n_wi_Li = n_wi * Li;
 
-		out_Color += u_Material.reflectivity * microfacetTerm + (1.0 - u_Material.reflectivity) * diffuse_term;
+		vec3 diffuseTerm = diffuseTermPreComp * n_wi_Li;
+		totalDiffuseTerm += diffuseTerm;
+		dielectricTerm += brdf * n_wi_Li + (1.0 - F) * diffuseTerm;
+		metalTerm += brdf * n_wi_Li;
 	}
+
+	metalTerm *= u_Material.albedo.rgb;
+	vec3 microfacetTerm = u_Material.metalness * metalTerm + (1.0 - u_Material.metalness) * dielectricTerm;
+
+	out_Color = u_Material.reflectivity * microfacetTerm + (1.0 - u_Material.reflectivity) * totalDiffuseTerm;
 }

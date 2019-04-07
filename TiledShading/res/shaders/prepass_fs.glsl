@@ -1,4 +1,4 @@
-#version 450 core
+#version 430 core
 
 in vec3 albedo;
 in vec3 viewSpacePosition;

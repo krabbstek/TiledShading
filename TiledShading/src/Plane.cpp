@@ -1,5 +1,10 @@
 #include "Plane.h"
 
+Plane::Plane()
+	: a(0.0f), b(0.0f), c(0.0f), d(0.0f)
+{
+}
+
 Plane::Plane(float a, float b, float c, float d)
 	: Plane(vec3(a, b, c), d)
 {
