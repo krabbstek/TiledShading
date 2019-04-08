@@ -62,8 +62,8 @@ Material material;
 int Init();
 void InitNoRendering();
 void InitForwardSimpleRendering();
-void InitDeferredRendering();
-void InitTiledDeferredRendering();
+void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
+void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void ImGuiRender();
 
 int main()
@@ -98,7 +98,7 @@ int main()
 			}
 		}
 
-		material.albedo = vec4(0.2, 0.3, 0.8);
+		material.albedo = vec4(0.2f, 0.3f, 0.8f);
 		material.reflectivity = 1.0;
 		material.shininess = 1.0;
 		material.metalness = 0.5;
@@ -110,6 +110,11 @@ int main()
 
 		/// Render techniques
 		{
+			// Timers
+			std::shared_ptr<GLTimer> prepassTimer = std::make_shared<GLTimer>();
+			std::shared_ptr<GLTimer> lightingPassTimer = std::make_shared<GLTimer>();
+			std::shared_ptr<GLTimer> totalRenderTimer = std::make_shared<GLTimer>();
+
 			// No rendering
 			InitNoRendering();
 
@@ -117,10 +122,10 @@ int main()
 			InitForwardSimpleRendering();
 
 			// Deferred non-tiled rendering
-			InitDeferredRendering();
+			InitDeferredRendering(prepassTimer, lightingPassTimer, totalRenderTimer);
 
 			// Tiled deferred rendering
-			InitTiledDeferredRendering();
+			InitTiledDeferredRendering(prepassTimer, lightingPassTimer, totalRenderTimer);
 		}
 		while (!glfwWindowShouldClose(window))
 		{
@@ -164,8 +169,6 @@ int main()
 			}
 
 			// Render
-			g_PlotOffset = (g_PlotOffset + 1) % g_NumGraphSamples;
-			
 			std::shared_ptr<RenderTechnique> currentRenderTechnique = renderModes[currentRenderMode].first;
 			currentRenderTechnique->Render(planeMesh);
 			for (int x = 0; x < g_CubeGridSize; x++)
@@ -215,7 +218,7 @@ int Init()
 	}
 
 	glfwMakeContextCurrent(window);
-	glfwSwapInterval(1);
+	glfwSwapInterval(0);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -300,10 +303,9 @@ void InitForwardSimpleRendering()
 	renderModes[FORWARD].second = "Forward rendering";
 }
 
-void InitDeferredRendering()
+void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
 {
-	//GLTexStorage2D texStorage2D(GL_R32UI, g_WindowWidth, g_WindowHeight);
-
+	// Textures
 	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
 	viewSpacePositionTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
 	viewSpacePositionTexture->SetMinMagFilter(GL_NEAREST);
@@ -314,6 +316,7 @@ void InitDeferredRendering()
 	viewSpaceNormalTexture->SetMinMagFilter(GL_NEAREST);
 	viewSpaceNormalTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
+	// Shaders
 	std::shared_ptr<GLShader> deferredPrepassShader = std::make_shared<GLShader>();
 	deferredPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/deferred_prepass_vs.glsl");
 	deferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/deferred_prepass_fs.glsl");
@@ -324,6 +327,7 @@ void InitDeferredRendering()
 	deferredLightingPassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/deferred_lighting_pass_fs.glsl");
 	deferredLightingPassShader->CompileShaders();
 
+	// Render passes
 	std::shared_ptr<DeferredPrepass> deferredPrepass = std::make_shared<DeferredPrepass>(
 		renderer,
 		deferredPrepassShader,
@@ -339,27 +343,43 @@ void InitDeferredRendering()
 		material
 	);
 
-	std::shared_ptr<GLTimer> totalRenderTimer = std::make_shared<GLTimer>();
+	// Timers
+	std::shared_ptr<StartGLTimerPass> startPrepassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, prepassTimer);
+	std::shared_ptr<StopGLTimerPass> stopPrepassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, prepassTimer);
+
+	std::shared_ptr<StartGLTimerPass> startLightingPassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, lightingPassTimer);
+	std::shared_ptr<StopGLTimerPass> stopLightingPassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, lightingPassTimer);
 
 	std::shared_ptr<StartGLTimerPass> startTotalRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
 	std::shared_ptr<StopGLTimerPass> stopTotalRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
 	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
+	plotTimersPass->AddTimer("Prepass render time", prepassTimer);
+	plotTimersPass->AddTimer("Lighting pass render time", lightingPassTimer);
 
+	// Create RenderTechnique
 	std::shared_ptr<RenderTechnique> deferredRendering = std::make_shared<RenderTechnique>();
+	// Plot render times
 	deferredRendering->AddRenderPass(plotTimersPass);
 	deferredRendering->AddRenderPass(startTotalRenderTimePass);
+	// Prepass
+	deferredRendering->AddRenderPass(startPrepassRenderTimePass);
 	deferredRendering->AddRenderPass(deferredPrepass);
+	deferredRendering->AddRenderPass(stopPrepassRenderTimePass);
+	// Lighting
+	deferredRendering->AddRenderPass(startLightingPassRenderTimePass);
 	deferredRendering->AddRenderPass(deferredLightingPass);
+	deferredRendering->AddRenderPass(stopLightingPassRenderTimePass);
 	deferredRendering->AddRenderPass(stopTotalRenderTimePass);
 
 	renderModes[DEFERRED].first = deferredRendering;
 	renderModes[DEFERRED].second = "Deferred rendering";
 }
 
-void InitTiledDeferredRendering()
+void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
 {
+	// Textures
 	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
 	viewSpacePositionTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
 	viewSpacePositionTexture->SetMinMagFilter(GL_NEAREST);
@@ -378,9 +398,11 @@ void InitTiledDeferredRendering()
 	tileMaxDepthImageTexture->SetMinMagFilter(GL_NEAREST);
 	tileMaxDepthImageTexture->SetWrapST(GL_CLAMP_TO_EDGE);
 
+	// SSBOs
 	std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, 0);
 	std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, 0);
 
+	// Shaders
 	std::shared_ptr<GLShader> tiledDeferredClearTileMinMaxDepthShader = std::make_shared<GLShader>();
 	tiledDeferredClearTileMinMaxDepthShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/tiled/tiled_deferred_clear_tile_min_max_depth_vs.glsl");
 	tiledDeferredClearTileMinMaxDepthShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled/tiled_deferred_clear_tile_min_max_depth_fs.glsl");
@@ -398,6 +420,7 @@ void InitTiledDeferredRendering()
 	tiledDeferredLightingPassShader->SetUniform1i("u_NumTileCols", g_NumTileCols);
 	tiledDeferredLightingPassShader->SetUniform1i("u_TileSize", g_TileSize);
 
+	// Render passes
 	std::shared_ptr<TiledDeferredClearTileMinMaxDepthPass> tiledDeferredClearTileMinMaxDepthPass = std::make_shared<TiledDeferredClearTileMinMaxDepthPass>(
 		renderer,
 		tiledDeferredClearTileMinMaxDepthShader,
@@ -432,11 +455,38 @@ void InitTiledDeferredRendering()
 		material
 	);
 
+	// Timers
+	std::shared_ptr<StartGLTimerPass> startPrepassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, prepassTimer);
+	std::shared_ptr<StopGLTimerPass> stopPrepassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, prepassTimer);
+
+	std::shared_ptr<StartGLTimerPass> startLightingPassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, lightingPassTimer);
+	std::shared_ptr<StopGLTimerPass> stopLightingPassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, lightingPassTimer);
+
+	std::shared_ptr<StartGLTimerPass> startTotalRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopGLTimerPass> stopTotalRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
+
+	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
+	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
+	plotTimersPass->AddTimer("Prepass render time", prepassTimer);
+	plotTimersPass->AddTimer("Lighting pass render time", lightingPassTimer);
+
+	// Create RenderTechnique
 	std::shared_ptr<RenderTechnique> tiledDeferredRendering = std::make_shared<RenderTechnique>();
+	// Plot render times
+	tiledDeferredRendering->AddRenderPass(plotTimersPass);
+	tiledDeferredRendering->AddRenderPass(startTotalRenderTimePass);
+	// Prepass
+	tiledDeferredRendering->AddRenderPass(startPrepassRenderTimePass);
 	tiledDeferredRendering->AddRenderPass(tiledDeferredClearTileMinMaxDepthPass);
 	tiledDeferredRendering->AddRenderPass(tiledDeferredPrepass);
+	tiledDeferredRendering->AddRenderPass(stopPrepassRenderTimePass);
+	// Compute light tiles
 	tiledDeferredRendering->AddRenderPass(tiledDeferredComputeLightTilesPass);
+	// Lighting
+	tiledDeferredRendering->AddRenderPass(startLightingPassRenderTimePass);
 	tiledDeferredRendering->AddRenderPass(tiledDeferredLightingPass);
+	tiledDeferredRendering->AddRenderPass(stopLightingPassRenderTimePass);
+	tiledDeferredRendering->AddRenderPass(stopTotalRenderTimePass);
 
 	renderModes[TILED_DEFERRED].first = tiledDeferredRendering;
 	renderModes[TILED_DEFERRED].second = "Tiled deferred rendering";

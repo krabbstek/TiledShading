@@ -112,10 +112,8 @@ void GLFramebuffer::GenerateDepthStencilRenderbuffer()
 void GLFramebuffer::SetDrawBufferAttachments(unsigned int count) const
 {
 	GLenum* attachments = new GLenum[count];
-	for (int i = 0; i < count; i++)
-	{
+	for (unsigned int i = 0; i < count; i++)
 		attachments[i] = GL_COLOR_ATTACHMENT0 + i;
-	}
 	SetDrawBufferAttachments(attachments, count);
 	delete[] attachments;
 }

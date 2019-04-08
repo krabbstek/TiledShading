@@ -74,7 +74,7 @@ void FullscreenMesh::Render(const Renderer& renderer, GLShader& shader) const
 	m_VAO->Bind();
 	m_IBO->Bind();
 	size_t size = m_Textures.size();
-	for (size_t i = 0; i < size; i++)
+	for (unsigned int i = 0; i < size; i++)
 		m_Textures[i]->Bind(i);
 	GLCall(glDrawElements(GL_TRIANGLES, m_IBO->Count(), GL_UNSIGNED_INT, 0));
 }
