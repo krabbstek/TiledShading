@@ -120,6 +120,13 @@ void GLShader::Unbind() const
 }
 
 
+void GLShader::DispatchComputeShader(unsigned int numWorkGroupsX, unsigned int numWorkGroupsY, unsigned int numWorkGroupsZ)
+{
+	Bind();
+	GLCall(glDispatchCompute(numWorkGroupsX, numWorkGroupsY, numWorkGroupsZ));
+}
+
+
 void GLShader::SetUniform1f(const std::string& uniformName, float value)
 {
 	int location = GetUniformLocation(uniformName);

@@ -438,6 +438,10 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 	tiledDeferredLightingPassShader->SetUniform1i("u_NumTileCols", g_NumTileCols);
 	tiledDeferredLightingPassShader->SetUniform1i("u_TileSize", g_TileSize);
 
+	std::shared_ptr<GLShader> tiledDeferredComputeLightTilesShader = std::make_shared<GLShader>();
+	tiledDeferredComputeLightTilesShader->AddShaderFromFile(GL_COMPUTE_SHADER, "res/shaders/deferred/tiled/tiled_deferred_compute_light_tiles_cs.glsl");
+	tiledDeferredComputeLightTilesShader->CompileShaders();
+
 	// Render passes
 	std::shared_ptr<TiledDeferredClearTileMinMaxDepthPass> tiledDeferredClearTileMinMaxDepthPass = std::make_shared<TiledDeferredClearTileMinMaxDepthPass>(
 		renderer,
@@ -457,6 +461,7 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 
 	std::shared_ptr<TiledDeferredComputeLightTilesPass> tiledDeferredComputeLightTilesPass = std::make_shared<TiledDeferredComputeLightTilesPass>(
 		renderer,
+		tiledDeferredComputeLightTilesShader,
 		tileMinDepthImageTexture,
 		tileMaxDepthImageTexture,
 		lightIndexSSBO,

@@ -2,6 +2,8 @@
 
 #include "Globals.h"
 
+#include <algorithm>
+
 TileGrid::TileGrid()
 {
 	// Make sure memory is reset
@@ -23,8 +25,8 @@ TileGrid::TileGrid()
 		normal.z = tan;
 		normal.Normalize();
 
-		m_LeftPlanes[col].a = normal.x;
-		m_LeftPlanes[col].c = normal.z;
+		leftPlanes[col].a = normal.x;
+		leftPlanes[col].c = normal.z;
 	}
 
 	// Right planes
@@ -36,8 +38,8 @@ TileGrid::TileGrid()
 		normal.z = -tan;
 		normal.Normalize();
 
-		m_RightPlanes[col].a = normal.x;
-		m_RightPlanes[col].c = normal.z;
+		rightPlanes[col].a = normal.x;
+		rightPlanes[col].c = normal.z;
 	}
 
 	// Bottom planes
@@ -49,8 +51,8 @@ TileGrid::TileGrid()
 		normal.z = tan;
 		normal.Normalize();
 
-		m_BottomPlanes[row].b = normal.y;
-		m_BottomPlanes[row].c = normal.z;
+		bottomPlanes[row].b = normal.y;
+		bottomPlanes[row].c = normal.z;
 	}
 
 	// Top planes
@@ -62,66 +64,20 @@ TileGrid::TileGrid()
 		normal.z = -tan;
 		normal.Normalize();
 
-		m_TopPlanes[row].b = normal.y;
-		m_TopPlanes[row].c = normal.z;
+		topPlanes[row].b = normal.y;
+		topPlanes[row].c = normal.z;
 	}
-
-	return;
-
-	constexpr float fovPerTile = g_FOV / float(g_NumTileRows);
-	constexpr float halfFovPerTile = 0.5f * fovPerTile;
-
-	constexpr int rightLim = g_NumTileCols - 2;
-	constexpr int leftLim = -rightLim;
-	constexpr int topLim = g_NumTileRows - 2;
-	constexpr int bottomLim = -topLim;
-
-	int lowIndex = 0;
-	int highIndex = 1;
-
-	float c, s;
-	normal;
-
-	for (int col = leftLim; col <= rightLim; col += 2)
-	{
-		c = cos(col * halfFovPerTile);
-		s = sin(col * halfFovPerTile);
-
-		normal.x = c;
-		normal.z = s;
-
-		m_LeftPlanes[highIndex++] = Plane(normal, 0.0f);
-		m_RightPlanes[lowIndex++] = Plane(-normal, 0.0f);
-	}
-
-	m_LeftPlanes[0] = Plane(cos(halfFovPerTile * g_NumTileCols), 0.0f, sin(halfFovPerTile * -g_NumTileCols), 0.0f);
-	m_RightPlanes[g_NumTileCols - 1] = Plane(-cos(halfFovPerTile * g_NumTileCols), 0.0f, -sin(halfFovPerTile * g_NumTileCols), 0.0f);
-
-	normal.x = 0.0f;
-	lowIndex = 0;
-	highIndex = 1;
-
-	for (int row = bottomLim; row <= topLim; row += 2)
-	{
-		c = cos(row * halfFovPerTile);
-		s = sin(row * halfFovPerTile);
-
-		normal.y = c;
-		normal.z = s;
-
-		m_BottomPlanes[highIndex++] = Plane(normal, 0.0f);
-		m_TopPlanes[lowIndex++] = Plane(-normal, 0.0f);
-	}
-
-	m_BottomPlanes[0] = Plane(0.0f, cos(halfFovPerTile * g_NumTileCols), sin(halfFovPerTile * -g_NumTileCols), 0.0f);
-	m_TopPlanes[g_NumTileRows] = Plane(0.0f, -cos(halfFovPerTile * g_NumTileCols), -sin(halfFovPerTile * g_NumTileCols), 0.0f);
 }
 
 
 void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDepth, float* tileMaxDepth, GLShaderStorageBuffer& lightIndexSSBO, GLShaderStorageBuffer& tileIndexSSBO)
 {
 	float lightDistanceThreshold = -sqrt(g_LightIntensityMultiplier / g_LightFalloffThreshold);
+	float r2 = lightDistanceThreshold * lightDistanceThreshold;
 	float planeDistance;
+
+	float tanY = tan(0.5f * g_FOV);
+	float halfTanPerTile = tanY * (1.0f / float(g_NumTileRows));
 
 	for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
 		for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
@@ -131,23 +87,113 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 	{
 		Light& light = lights[lightIndex];
 
+#if 0
+		// Check if the origin is within the threshold radius. If it is: check all tiles
+		if (light.viewSpacePosition.Dot(light.viewSpacePosition) <= r2)
+		{
+			for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
+			{
+				for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
+				{
+					planeDistance = light.viewSpacePosition.z - tileMinDepth[tileRow * g_NumTileCols + tileCol];
+					if (planeDistance <= lightDistanceThreshold)
+						continue;
+
+					planeDistance = tileMaxDepth[tileRow * g_NumTileCols + tileCol] - light.viewSpacePosition.z;
+					if (planeDistance <= lightDistanceThreshold)
+						continue;
+
+					m_LightTiles[tileRow][tileCol].push_back(lightIndex);
+				}
+			}
+		}
+		else
+		{
+			int leftLim, rightLim, bottomLim, topLim;
+
+			vec2 d = vec2(light.viewSpacePosition.x, light.viewSpacePosition.z);
+			float d2 = d.Dot(d);
+			// Compute left and right tile limits
+			float tNorm = sqrt(d2 - r2);
+			float dInv = 1.0f / sqrt(d2);
+			float cos = tNorm * dInv;
+			float sin = lightDistanceThreshold * dInv;
+
+			vec2 t = vec2(cos * d.x + sin * d.y, cos * d.y - sin * d.x);
+			if (t.y >= 0.0f)
+				leftLim = 0;
+			else
+			{
+				float tan = t.x / t.y;
+				float normalizedTan = tan / (0.5f * halfTanPerTile);
+				leftLim = int(floorf(normalizedTan + 0.5f * float(g_NumTileRows)));
+			}
+
+			t = vec2(cos * d.x - sin * d.y, cos * d.y + sin * d.x);
+			if (t.y >= 0.0f)
+				rightLim = g_NumTileCols;
+			else
+			{
+				float tan = t.x / t.y;
+				float normalizedTan = tan / (0.5f * halfTanPerTile);
+				rightLim = int(ceilf(normalizedTan + 0.5f * float(g_NumTileRows)));
+			}
+
+			d = vec2(light.viewSpacePosition.y, light.viewSpacePosition.z);
+			d2 = d.Dot(d);
+			// Compute bottom and top tile limits
+			tNorm = sqrt(d2 - r2);
+			dInv = 1.0f / sqrt(d2);
+			cos = tNorm * dInv;
+			sin = lightDistanceThreshold * dInv;
+
+			t = vec2(cos * d.x + sin * d.y, cos * d.y - sin * d.x);
+			if (t.y >= 0.0f)
+				bottomLim = 0;
+			else
+			{
+				float tan = t.x / t.y;
+				float normalizedTan = tan / (0.5f * halfTanPerTile);
+				bottomLim = int(floorf(normalizedTan + 0.5f * float(g_NumTileRows)));
+			}
+
+			t = vec2(cos * d.x - sin * d.y, cos * d.y + sin * d.x);
+			if (t.y >= 0.0f)
+				topLim = g_NumTileCols;
+			else
+			{
+				float tan = t.x / t.y;
+				float normalizedTan = tan / (0.5f * halfTanPerTile);
+				topLim = int(ceilf(normalizedTan + 0.5f * float(g_NumTileRows)));
+			}
+
+			leftLim = std::max(leftLim, 0);
+			rightLim = std::min(rightLim, g_NumTileCols);
+			bottomLim = std::max(bottomLim, 0);
+			topLim = std::min(topLim, g_NumTileRows);
+
+			for (int row = bottomLim; row < topLim; row++)
+				for (int col = leftLim; col < rightLim; col++)
+					m_LightTiles[row][col].push_back(lightIndex);
+		}
+#else
 		for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
 		{
-			planeDistance = m_BottomPlanes[tileRow].Distance(light.viewSpacePosition);
+			planeDistance = bottomPlanes[tileRow].Distance(light.viewSpacePosition);
 			if (planeDistance <= lightDistanceThreshold)
 				continue;
 
-			planeDistance = m_TopPlanes[tileRow].Distance(light.viewSpacePosition);
+			planeDistance = topPlanes[tileRow].Distance(light.viewSpacePosition);
 			if (planeDistance <= lightDistanceThreshold)
 				continue;
 
 			for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
 			{
-				planeDistance = m_LeftPlanes[tileCol].Distance(light.viewSpacePosition);
+				planeDistance = leftPlanes[tileCol].Distance(light.viewSpacePosition);
 				if (planeDistance <= lightDistanceThreshold)
 					continue;
 
-				planeDistance = m_RightPlanes[tileCol].Distance(light.viewSpacePosition);
+				planeDistance = rightPlanes[tileCol].Distance(light.viewSpacePosition);
 				if (planeDistance <= lightDistanceThreshold)
 					continue;
 
@@ -162,6 +208,7 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 				m_LightTiles[tileRow][tileCol].push_back(lightIndex);
 			}
 		}
+#endif
 	}
 
 	int memoryLayoutIndex = 0;
