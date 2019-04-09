@@ -9,6 +9,7 @@
 #include "graphics/renderpasses/StopGLTimerPass.h"
 #include "graphics/renderpasses/PlotTimersPass.h"
 #include "graphics/renderpasses/ClearDefaultFramebufferPass.h"
+#include "graphics/renderpasses/forward/ForwardPass.h"
 #include "graphics/renderpasses/forward/ForwardPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredLightingPass.h"
@@ -61,6 +62,7 @@ Material material;
 
 int Init();
 void InitNoRendering();
+void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer);
 void InitForwardSimpleRendering();
 void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
@@ -111,21 +113,22 @@ int main()
 		/// Render techniques
 		{
 			// Timers
-			std::shared_ptr<GLTimer> prepassTimer = std::make_shared<GLTimer>();
-			std::shared_ptr<GLTimer> lightingPassTimer = std::make_shared<GLTimer>();
-			std::shared_ptr<GLTimer> totalRenderTimer = std::make_shared<GLTimer>();
+			std::shared_ptr<GLTimer> forwardTotalRenderTimer = std::make_shared<GLTimer>();
+			std::shared_ptr<GLTimer> deferredPrepassTimer = std::make_shared<GLTimer>();
+			std::shared_ptr<GLTimer> deferredLightingPassTimer = std::make_shared<GLTimer>();
+			std::shared_ptr<GLTimer> deferredTotalRenderTimer = std::make_shared<GLTimer>();
 
 			// No rendering
 			InitNoRendering();
 
 			// Forward non-tiled rendering
-			InitForwardSimpleRendering();
+			InitForwardRendering(forwardTotalRenderTimer);
 
 			// Deferred non-tiled rendering
-			InitDeferredRendering(prepassTimer, lightingPassTimer, totalRenderTimer);
+			InitDeferredRendering(deferredPrepassTimer, deferredLightingPassTimer, deferredTotalRenderTimer);
 
 			// Tiled deferred rendering
-			InitTiledDeferredRendering(prepassTimer, lightingPassTimer, totalRenderTimer);
+			InitTiledDeferredRendering(deferredPrepassTimer, deferredLightingPassTimer, deferredTotalRenderTimer);
 		}
 		while (!glfwWindowShouldClose(window))
 		{
@@ -282,6 +285,39 @@ void InitNoRendering()
 
 	renderModes[NONE].first = noRendering;
 	renderModes[NONE].second = "No rendering";
+}
+
+void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer)
+{
+	// Shaders
+	std::shared_ptr<GLShader> forwardShader = std::make_shared<GLShader>();
+	forwardShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/forward/forward_vs.glsl");
+	forwardShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/forward/forward_fs.glsl");
+	forwardShader->CompileShaders();
+
+	// Render passes
+	std::shared_ptr<ForwardPass> forwardPass = std::make_shared<ForwardPass>(
+		renderer,
+		forwardShader,
+		material
+	);
+
+	// Timers
+	std::shared_ptr<StartGLTimerPass> startTotalRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopGLTimerPass> stopTotalRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
+
+	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
+	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
+
+	// Render technique
+	std::shared_ptr<RenderTechnique> forwardRendering = std::make_shared<RenderTechnique>();
+	forwardRendering->AddRenderPass(plotTimersPass);
+	forwardRendering->AddRenderPass(startTotalRenderTimePass);
+	forwardRendering->AddRenderPass(forwardPass);
+	forwardRendering->AddRenderPass(stopTotalRenderTimePass);
+
+	renderModes[FORWARD].first = forwardRendering;
+	renderModes[FORWARD].second = "Forward rendering";
 }
 
 void InitForwardSimpleRendering()
