@@ -23,6 +23,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <random>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -63,7 +64,6 @@ Material material;
 int Init();
 void InitNoRendering();
 void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer);
-void InitForwardSimpleRendering();
 void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void ImGuiRender();
@@ -79,7 +79,7 @@ int main()
 		return initResult;
 
 	{
-		renderer.camera.projectionMatrix = mat4::Perspective(g_FOV, float(g_WindowWidth) / float(g_WindowHeight), g_NearPlaneDepth, g_FarPlaneDepth);
+		renderer.camera.projectionMatrix = mat4::Perspective(g_FOV, g_AspectRatio, g_NearPlaneDepth, g_FarPlaneDepth);
 		renderer.camera.position = vec3(0.0f, 4.0f, 12.0f);
 		renderer.camera.rotation = vec3(-0.4f, 0.0f, 0.0f);
 		mat4 V = renderer.camera.GetViewMatrix();
@@ -94,9 +94,10 @@ int main()
 		{
 			for (int z = 0; z < g_LightGridSize; z++)
 			{
-				g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier, g_LightIntensityMultiplier, g_LightIntensityMultiplier, 1.0f);
-				vec4 position = vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
-				g_LightGrid[x][z].viewSpacePosition = V * position;
+				g_LightColors[x][z] = vec3(float(rand()) * (1.0f / float(RAND_MAX)), float(rand()) * (1.0f / float(RAND_MAX)), float(rand()) * (1.0f / float(RAND_MAX)));
+				g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
+
+				g_LightGrid[x][z].viewSpacePosition = V * vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);;
 			}
 		}
 
@@ -152,9 +153,9 @@ int main()
 				{
 					for (int z = 0; z < g_LightGridSize; z++)
 					{
-						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier, g_LightIntensityMultiplier, g_LightIntensityMultiplier, 1.0f);
-						vec4 position = vec4(0.5f * (s - 1.0f) * lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, 0.5f * (s - 1.0f) * lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
-						g_LightGrid[x][z].viewSpacePosition = V * position;
+						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
+
+						g_LightGrid[x][z].viewSpacePosition = V * vec4(0.5f * (s - 1.0f) * lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, 0.5f * (s - 1.0f) * lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
 					}
 				}
 			}
@@ -164,9 +165,9 @@ int main()
 				{
 					for (int z = 0; z < g_LightGridSize; z++)
 					{
-						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier, g_LightIntensityMultiplier, g_LightIntensityMultiplier, 1.0f);
-						vec4 position = vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
-						g_LightGrid[x][z].viewSpacePosition = V * position;
+						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
+
+						g_LightGrid[x][z].viewSpacePosition = V * vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
 					}
 				}
 			}
@@ -315,25 +316,6 @@ void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer)
 	forwardRendering->AddRenderPass(startTotalRenderTimePass);
 	forwardRendering->AddRenderPass(forwardPass);
 	forwardRendering->AddRenderPass(stopTotalRenderTimePass);
-
-	renderModes[FORWARD].first = forwardRendering;
-	renderModes[FORWARD].second = "Forward rendering";
-}
-
-void InitForwardSimpleRendering()
-{
-	std::shared_ptr<GLShader> forwardPrepassShader = std::make_shared<GLShader>();
-	forwardPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/forward/forward_prepass_vs.glsl");
-	forwardPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/forward/forward_prepass_fs.glsl");
-	forwardPrepassShader->CompileShaders();
-
-	std::shared_ptr<ForwardPrepass> forwardPrepass = std::make_shared<ForwardPrepass>(
-		renderer,
-		forwardPrepassShader
-	);
-
-	std::shared_ptr<RenderTechnique> forwardRendering = std::make_shared<RenderTechnique>();
-	forwardRendering->AddRenderPass(forwardPrepass);
 
 	renderModes[FORWARD].first = forwardRendering;
 	renderModes[FORWARD].second = "Forward rendering";
