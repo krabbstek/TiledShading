@@ -49,17 +49,16 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 
 	m_TileGrid.ComputeLightTiles((Light*)g_LightGrid, g_LightGridSize * g_LightGridSize, tileMinDepth, tileMaxDepth, *m_LightIndexSSBO, *m_TileIndexSSBO);
 
-	return;
+	//return;
 
 	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
 	m_LightSSBO->Bind(3);
 	
-	int lightIndices[g_NumTileRows * g_NumTileCols * g_MaxNumLightsPerTile];
-	int numLightsPerTile[g_NumTileRows * g_NumTileCols];
-	memset(numLightsPerTile, 0, sizeof(numLightsPerTile));
-	m_LightIndexSSBO->SetData(lightIndices, sizeof(lightIndices));
+	
+	memset(m_NumLightsPerTile, 0, sizeof(m_NumLightsPerTile));
+	m_LightIndexSSBO->SetData(m_LightIndices, sizeof(m_LightIndices));
 	m_LightIndexSSBO->Bind(4);
-	m_TileIndexSSBO->SetData(numLightsPerTile, sizeof(numLightsPerTile));
+	m_TileIndexSSBO->SetData(m_NumLightsPerTile, sizeof(m_NumLightsPerTile));
 	m_TileIndexSSBO->Bind(5);
 
 	m_LeftPlanesSSBO->Bind(10);
@@ -72,8 +71,23 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 	GLCall(glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT));
 	
 	m_TileIndexSSBO->Bind();
-	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(numLightsPerTile), numLightsPerTile));
+	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_NumLightsPerTile), m_NumLightsPerTile));
 
 	m_LightIndexSSBO->Bind();
-	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(lightIndices), lightIndices));
+	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_LightIndices), m_LightIndices));
+
+	std::vector<int> li;
+	std::vector<int> ti;
+	for (int i = 0; i < g_NumTileRows * g_NumTileCols; i++)
+	{
+		int size = m_NumLightsPerTile[i];
+		int offset = g_MaxNumLightsPerTile * i;
+		ti.emplace_back(li.size());
+		ti.emplace_back(size);
+		for (int j = 0; j < size; j++)
+			li.emplace_back(m_LightIndices[offset + j]);
+	}
+
+	m_LightIndexSSBO->SetData(li.data(), li.size() * sizeof(int));
+	m_TileIndexSSBO->SetData(ti.data(), ti.size() * sizeof(int));
 }

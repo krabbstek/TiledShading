@@ -5,8 +5,8 @@
 #include "graphics/Renderer.h"
 #include "graphics/RenderTechnique.h"
 #include "graphics/opengl/OpenGL.h"
-#include "graphics/renderpasses/StartGLTimerPass.h"
-#include "graphics/renderpasses/StopGLTimerPass.h"
+#include "graphics/renderpasses/StartTimerPass.h"
+#include "graphics/renderpasses/StopTimerPass.h"
 #include "graphics/renderpasses/PlotTimersPass.h"
 #include "graphics/renderpasses/ClearDefaultFramebufferPass.h"
 #include "graphics/renderpasses/forward/ForwardPass.h"
@@ -47,14 +47,6 @@ std::pair<std::shared_ptr<RenderTechnique>, std::string> renderModes[NUM_RENDER_
 
 RENDER_MODE currentRenderMode = TILED_DEFERRED;
 
-std::chrono::time_point<std::chrono::high_resolution_clock> start, current;
-float currentTime;
-
-
-vec3 lightGridOffset = vec3(0.0f, 0.6f, 0.0f);
-vec2 lightGridScale = vec2(0.7f); //(3.5f);
-bool dynamicLights = true;
-
 GLFWwindow* window;
 
 Renderer renderer;
@@ -64,15 +56,16 @@ Material material;
 int Init();
 void InitNoRendering();
 void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer);
-void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
-void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
+void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
+void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void ImGuiRender();
 
 int main()
 {
 	static_assert(!((g_WindowWidth % g_TileSize) | (g_WindowHeight % g_TileSize)));
 
-	start = std::chrono::high_resolution_clock::now();
+	std::chrono::time_point<std::chrono::high_resolution_clock> prevTime, currentTime;
+	prevTime = std::chrono::high_resolution_clock::now();
 
 	int initResult = Init();
 	if (initResult)
@@ -97,7 +90,7 @@ int main()
 				g_LightColors[x][z] = vec3(float(rand()) * (1.0f / float(RAND_MAX)), float(rand()) * (1.0f / float(RAND_MAX)), float(rand()) * (1.0f / float(RAND_MAX)));
 				g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
 
-				g_LightGrid[x][z].viewSpacePosition = V * vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);;
+				g_LightGrid[x][z].viewSpacePosition = V * vec4(g_LightGridScale.x * (x - (g_LightGridSize - 1) / 2) + g_LightGridOffset.x, g_LightGridOffset.y, g_LightGridScale.y * (z - (g_LightGridSize - 1) / 2) + g_LightGridOffset.z, 1.0f);;
 			}
 		}
 
@@ -116,6 +109,7 @@ int main()
 			// Timers
 			std::shared_ptr<GLTimer> forwardTotalRenderTimer = std::make_shared<GLTimer>();
 			std::shared_ptr<GLTimer> deferredPrepassTimer = std::make_shared<GLTimer>();
+			std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer = std::make_shared<CPUTimer>();
 			std::shared_ptr<GLTimer> deferredLightingPassTimer = std::make_shared<GLTimer>();
 			std::shared_ptr<GLTimer> deferredTotalRenderTimer = std::make_shared<GLTimer>();
 
@@ -126,19 +120,13 @@ int main()
 			InitForwardRendering(forwardTotalRenderTimer);
 
 			// Deferred non-tiled rendering
-			InitDeferredRendering(deferredPrepassTimer, deferredLightingPassTimer, deferredTotalRenderTimer);
+			InitDeferredRendering(deferredPrepassTimer, deferredTileLightingComputationTimer, deferredLightingPassTimer, deferredTotalRenderTimer);
 
 			// Tiled deferred rendering
-			InitTiledDeferredRendering(deferredPrepassTimer, deferredLightingPassTimer, deferredTotalRenderTimer);
+			InitTiledDeferredRendering(deferredPrepassTimer, deferredTileLightingComputationTimer, deferredLightingPassTimer, deferredTotalRenderTimer);
 		}
 		while (!glfwWindowShouldClose(window))
 		{
-			current = std::chrono::high_resolution_clock::now();
-			currentTime = std::chrono::duration<float>(current - start).count();
-
-			float c = cos(currentTime);
-			float s = sin(currentTime);
-
 			glfwPollEvents();
 
 #ifdef USE_IMGUI
@@ -147,29 +135,29 @@ int main()
 			ImGui::NewFrame();
 #endif
 
-			if (dynamicLights)
+			currentTime = std::chrono::high_resolution_clock::now();
+			float dt = float((currentTime - prevTime).count()) * 1e-9f;
+			prevTime = currentTime;
+
+			if (g_DynamicLights)
 			{
+				g_Time += dt;
+
 				for (int x = 0; x < g_LightGridSize; x++)
 				{
 					for (int z = 0; z < g_LightGridSize; z++)
 					{
 						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
 
-						g_LightGrid[x][z].viewSpacePosition = V * vec4(0.5f * (s - 1.0f) * lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, 0.5f * (s - 1.0f) * lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
+						g_LightGrid[x][z].viewSpacePosition = V * mat4::RotateY(0.3f * g_Time) * vec4(g_LightGridScale.x * (x - (g_LightGridSize - 1) / 2) + g_LightGridOffset.x, g_LightGridOffset.y, g_LightGridScale.y * (z - (g_LightGridSize - 1) / 2) + g_LightGridOffset.z, 1.0f);
 					}
 				}
 			}
 			else
 			{
 				for (int x = 0; x < g_LightGridSize; x++)
-				{
 					for (int z = 0; z < g_LightGridSize; z++)
-					{
 						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
-
-						g_LightGrid[x][z].viewSpacePosition = V * vec4(lightGridScale.x * (x - (g_LightGridSize - 1) / 2) + lightGridOffset.x, lightGridOffset.y, lightGridScale.y * (z - (g_LightGridSize - 1) / 2) + lightGridOffset.z, 1.0f);
-					}
-				}
 			}
 
 			// Render
@@ -258,11 +246,11 @@ void ImGuiRender()
 	ImGui::Separator();
 
 	ImGui::Text("Light");
-	ImGui::Checkbox("Dynamic lights", &dynamicLights);
+	ImGui::Checkbox("Dynamic lights", &g_DynamicLights);
 	ImGui::SliderFloat("Light intensity multiplier", &g_LightIntensityMultiplier, 0.0f, 100.0f, "%.2f", 3.0f);
 	ImGui::SliderFloat("Light falloff threshold", &g_LightFalloffThreshold, 0.001f, 0.1f, "%.3f", 2.0f);
-	ImGui::SliderFloat3("Light grid offset", &lightGridOffset.x, -3.0f, 3.0f, "%.1f", 1.0f);
-	ImGui::SliderFloat2("Light grid scale", &lightGridScale.x, 0.0f, 10.0f, "%.1f", 1.0f);
+	ImGui::SliderFloat3("Light grid offset", &g_LightGridOffset.x, -3.0f, 3.0f, "%.1f", 1.0f);
+	ImGui::SliderFloat2("Light grid scale", &g_LightGridScale.x, 0.0f, 10.0f, "%.1f", 1.0f);
 
 	ImGui::Separator();
 
@@ -304,8 +292,8 @@ void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer)
 	);
 
 	// Timers
-	std::shared_ptr<StartGLTimerPass> startTotalRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
-	std::shared_ptr<StopGLTimerPass> stopTotalRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StartTimerPass> startTotalRenderTimePass = std::make_shared<StartTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopTimerPass> stopTotalRenderTimePass = std::make_shared<StopTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
 	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
@@ -321,7 +309,7 @@ void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer)
 	renderModes[FORWARD].second = "Forward rendering";
 }
 
-void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
+void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
 {
 	// Textures
 	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
@@ -362,18 +350,22 @@ void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_pt
 	);
 
 	// Timers
-	std::shared_ptr<StartGLTimerPass> startPrepassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, prepassTimer);
-	std::shared_ptr<StopGLTimerPass> stopPrepassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, prepassTimer);
+	std::shared_ptr<StartTimerPass> startPrepassRenderTimePass = std::make_shared<StartTimerPass>(renderer, prepassTimer);
+	std::shared_ptr<StopTimerPass> stopPrepassRenderTimePass = std::make_shared<StopTimerPass>(renderer, prepassTimer);
 
-	std::shared_ptr<StartGLTimerPass> startLightingPassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, lightingPassTimer);
-	std::shared_ptr<StopGLTimerPass> stopLightingPassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, lightingPassTimer);
+	std::shared_ptr<StartTimerPass> startTileLightingComputationTimePass = std::make_shared<StartTimerPass>(renderer, deferredTileLightingComputationTimer);
+	std::shared_ptr<StopTimerPass> stopTileLightingComputationTimePass = std::make_shared<StopTimerPass>(renderer, deferredTileLightingComputationTimer);
 
-	std::shared_ptr<StartGLTimerPass> startTotalRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
-	std::shared_ptr<StopGLTimerPass> stopTotalRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StartTimerPass> startLightingPassRenderTimePass = std::make_shared<StartTimerPass>(renderer, lightingPassTimer);
+	std::shared_ptr<StopTimerPass> stopLightingPassRenderTimePass = std::make_shared<StopTimerPass>(renderer, lightingPassTimer);
+
+	std::shared_ptr<StartTimerPass> startTotalRenderTimePass = std::make_shared<StartTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopTimerPass> stopTotalRenderTimePass = std::make_shared<StopTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
 	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
 	plotTimersPass->AddTimer("Prepass render time", prepassTimer);
+	plotTimersPass->AddTimer("Tile lighting computation time", deferredTileLightingComputationTimer);
 	plotTimersPass->AddTimer("Lighting pass render time", lightingPassTimer);
 
 	// Create RenderTechnique
@@ -385,6 +377,9 @@ void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_pt
 	deferredRendering->AddRenderPass(startPrepassRenderTimePass);
 	deferredRendering->AddRenderPass(deferredPrepass);
 	deferredRendering->AddRenderPass(stopPrepassRenderTimePass);
+	// Tile lighting computation
+	deferredRendering->AddRenderPass(startTileLightingComputationTimePass);
+	deferredRendering->AddRenderPass(stopTileLightingComputationTimePass);
 	// Lighting
 	deferredRendering->AddRenderPass(startLightingPassRenderTimePass);
 	deferredRendering->AddRenderPass(deferredLightingPass);
@@ -395,7 +390,7 @@ void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_pt
 	renderModes[DEFERRED].second = "Deferred rendering";
 }
 
-void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
+void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
 {
 	// Textures
 	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
@@ -479,18 +474,22 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 	);
 
 	// Timers
-	std::shared_ptr<StartGLTimerPass> startPrepassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, prepassTimer);
-	std::shared_ptr<StopGLTimerPass> stopPrepassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, prepassTimer);
+	std::shared_ptr<StartTimerPass> startPrepassRenderTimePass = std::make_shared<StartTimerPass>(renderer, prepassTimer);
+	std::shared_ptr<StopTimerPass> stopPrepassRenderTimePass = std::make_shared<StopTimerPass>(renderer, prepassTimer);
 
-	std::shared_ptr<StartGLTimerPass> startLightingPassRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, lightingPassTimer);
-	std::shared_ptr<StopGLTimerPass> stopLightingPassRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, lightingPassTimer);
+	std::shared_ptr<StartTimerPass> startTileLightingComputationTimePass = std::make_shared<StartTimerPass>(renderer, deferredTileLightingComputationTimer);
+	std::shared_ptr<StopTimerPass> stopTileLightingComputationTimePass = std::make_shared<StopTimerPass>(renderer, deferredTileLightingComputationTimer);
 
-	std::shared_ptr<StartGLTimerPass> startTotalRenderTimePass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
-	std::shared_ptr<StopGLTimerPass> stopTotalRenderTimePass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StartTimerPass> startLightingPassRenderTimePass = std::make_shared<StartTimerPass>(renderer, lightingPassTimer);
+	std::shared_ptr<StopTimerPass> stopLightingPassRenderTimePass = std::make_shared<StopTimerPass>(renderer, lightingPassTimer);
+
+	std::shared_ptr<StartTimerPass> startTotalRenderTimePass = std::make_shared<StartTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopTimerPass> stopTotalRenderTimePass = std::make_shared<StopTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
 	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
 	plotTimersPass->AddTimer("Prepass render time", prepassTimer);
+	plotTimersPass->AddTimer("Tile lighting computation time", deferredTileLightingComputationTimer);
 	plotTimersPass->AddTimer("Lighting pass render time", lightingPassTimer);
 
 	// Create RenderTechnique
@@ -504,7 +503,9 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 	tiledDeferredRendering->AddRenderPass(tiledDeferredPrepass);
 	tiledDeferredRendering->AddRenderPass(stopPrepassRenderTimePass);
 	// Compute light tiles
+	tiledDeferredRendering->AddRenderPass(startTileLightingComputationTimePass);
 	tiledDeferredRendering->AddRenderPass(tiledDeferredComputeLightTilesPass);
+	tiledDeferredRendering->AddRenderPass(stopTileLightingComputationTimePass);
 	// Lighting
 	tiledDeferredRendering->AddRenderPass(startLightingPassRenderTimePass);
 	tiledDeferredRendering->AddRenderPass(tiledDeferredLightingPass);

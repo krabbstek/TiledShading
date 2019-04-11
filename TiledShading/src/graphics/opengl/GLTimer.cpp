@@ -3,9 +3,8 @@
 #include "GLCommon.h"
 
 GLTimer::GLTimer()
-	: m_Offset(0)
+	: Timer()
 {
-	memset(m_Data, 0, sizeof(m_Data));
 	GLCall(glGenQueries(2, m_QueryID));
 	Start();
 	Stop();

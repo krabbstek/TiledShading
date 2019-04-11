@@ -176,6 +176,26 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 				for (int col = leftLim; col < rightLim; col++)
 					m_LightTiles[row][col].push_back(lightIndex);
 		}
+#elif 0
+
+		planeDistance = bottomPlanes[0].Distance(light.viewSpacePosition);
+		if (planeDistance <= lightDistanceThreshold)
+			continue;
+
+		planeDistance = topPlanes[g_NumTileRows - 1].Distance(light.viewSpacePosition);
+		if (planeDistance <= lightDistanceThreshold)
+			continue;
+
+		planeDistance = leftPlanes[0].Distance(light.viewSpacePosition);
+		if (planeDistance <= lightDistanceThreshold)
+			continue;
+
+		planeDistance = rightPlanes[g_NumTileRows - 1].Distance(light.viewSpacePosition);
+		if (planeDistance <= lightDistanceThreshold)
+			continue;
+
+
+
 #else
 		for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
 		{
