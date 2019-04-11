@@ -2,6 +2,8 @@
 
 #include "Globals.h"
 
+#include <algorithm>
+
 TiledDeferredComputeLightTilesPass::TiledDeferredComputeLightTilesPass(
 	Renderer& renderer,
 	std::shared_ptr<GLShader> computeShader,
@@ -22,6 +24,9 @@ TiledDeferredComputeLightTilesPass::TiledDeferredComputeLightTilesPass(
 	m_TopPlanesSSBO = std::make_shared<GLShaderStorageBuffer>(m_TileGrid.topPlanes, sizeof(m_TileGrid.topPlanes));
 
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
+
+	memset(m_LightIndices, 0, sizeof(m_LightIndices));
+	memset(m_TileIndices, 0, sizeof(m_TileIndices));
 }
 
 TiledDeferredComputeLightTilesPass::~TiledDeferredComputeLightTilesPass()
@@ -31,6 +36,7 @@ TiledDeferredComputeLightTilesPass::~TiledDeferredComputeLightTilesPass()
 
 void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& renderables)
 {
+#if 1
 	int tilePixels[g_NumTileRows * g_NumTileCols];
 	float tileMinDepth[g_NumTileRows * g_NumTileCols];
 	float tileMaxDepth[g_NumTileRows * g_NumTileCols];
@@ -49,16 +55,14 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 
 	m_TileGrid.ComputeLightTiles((Light*)g_LightGrid, g_LightGridSize * g_LightGridSize, tileMinDepth, tileMaxDepth, *m_LightIndexSSBO, *m_TileIndexSSBO);
 
-	//return;
+#else
 
 	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
 	m_LightSSBO->Bind(3);
 	
-	
-	memset(m_NumLightsPerTile, 0, sizeof(m_NumLightsPerTile));
 	m_LightIndexSSBO->SetData(m_LightIndices, sizeof(m_LightIndices));
 	m_LightIndexSSBO->Bind(4);
-	m_TileIndexSSBO->SetData(m_NumLightsPerTile, sizeof(m_NumLightsPerTile));
+	m_TileIndexSSBO->SetData(m_TileIndices, sizeof(m_TileIndices) / 2);
 	m_TileIndexSSBO->Bind(5);
 
 	m_LeftPlanesSSBO->Bind(10);
@@ -70,24 +74,28 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 
 	GLCall(glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT));
 	
+	// No indices, only size from compute shader
 	m_TileIndexSSBO->Bind();
-	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_NumLightsPerTile), m_NumLightsPerTile));
+	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_TileIndices) / 2, m_TileIndices));
 
 	m_LightIndexSSBO->Bind();
 	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_LightIndices), m_LightIndices));
 
-	std::vector<int> li;
-	std::vector<int> ti;
+	int lightIndexOffset = 0;
+	int size;
 	for (int i = 0; i < g_NumTileRows * g_NumTileCols; i++)
 	{
-		int size = m_NumLightsPerTile[i];
-		int offset = g_MaxNumLightsPerTile * i;
-		ti.emplace_back(li.size());
-		ti.emplace_back(size);
-		for (int j = 0; j < size; j++)
-			li.emplace_back(m_LightIndices[offset + j]);
-	}
+		size = std::min(std::min(m_TileIndices[i], g_MaxNumLightsPerTile), g_LightGridSize * g_LightGridSize);
+		m_TileIndices[i * 2] = lightIndexOffset;
+		m_TileIndices[i * 2 + 1] = size;
 
-	m_LightIndexSSBO->SetData(li.data(), li.size() * sizeof(int));
-	m_TileIndexSSBO->SetData(ti.data(), ti.size() * sizeof(int));
+		memcpy(&m_LightIndices[lightIndexOffset], &m_LightIndices[g_MaxNumLightsPerTile * i], size * sizeof(int));
+		lightIndexOffset += size;
+	}
+	if (!lightIndexOffset)
+		lightIndexOffset++;
+
+	m_LightIndexSSBO->SetData(m_LightIndices, lightIndexOffset * sizeof(int));
+	m_TileIndexSSBO->SetData(m_TileIndices, sizeof(m_TileIndices));
+#endif
 }
