@@ -11,8 +11,7 @@ public:
 		std::shared_ptr<GLShader> computeShader,
 		std::shared_ptr<GLImageTexture2D> tileMinDepthImageTexture,
 		std::shared_ptr<GLImageTexture2D> tileMaxDepthImageTexture,
-		std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO,
-		std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO);
+		std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO);
 	~TiledDeferredComputeLightTilesPass();
 
 	virtual void Render(std::vector<Renderable*>& renderables) override;
@@ -20,12 +19,10 @@ public:
 protected:
 	TileGrid m_TileGrid;
 	int m_LightIndices[g_NumTileRows * g_NumTileCols * g_MaxNumLightsPerTile];
-	int m_TileIndices[g_NumTileRows * g_NumTileCols * 2];
 	std::shared_ptr<GLImageTexture2D> m_TileMinDepthImageTexture;
 	std::shared_ptr<GLImageTexture2D> m_TileMaxDepthImageTexture;
 	std::shared_ptr<GLShaderStorageBuffer> m_LightSSBO;
 	std::shared_ptr<GLShaderStorageBuffer> m_LightIndexSSBO;
-	std::shared_ptr<GLShaderStorageBuffer> m_TileIndexSSBO;
 	std::shared_ptr<GLShaderStorageBuffer> m_LeftPlanesSSBO;
 	std::shared_ptr<GLShaderStorageBuffer> m_RightPlanesSSBO;
 	std::shared_ptr<GLShaderStorageBuffer> m_BottomPlanesSSBO;

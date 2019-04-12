@@ -2,11 +2,10 @@
 
 #include "Globals.h"
 
-TiledDeferredLightingPass::TiledDeferredLightingPass(Renderer& renderer, std::shared_ptr<GLShader> shader, std::shared_ptr<GLTexture2D> viewSpacePositionTexture, std::shared_ptr<GLTexture2D> viewSpaceNormalTexture, std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO, std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO, const Material& material)
+TiledDeferredLightingPass::TiledDeferredLightingPass(Renderer& renderer, std::shared_ptr<GLShader> shader, std::shared_ptr<GLTexture2D> viewSpacePositionTexture, std::shared_ptr<GLTexture2D> viewSpaceNormalTexture, std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO, const Material& material)
 	: RenderPass(renderer, shader),
 	m_LightSSBO(std::make_shared<GLShaderStorageBuffer>(g_LightGrid, sizeof(g_LightGrid))),
 	m_LightIndexSSBO(lightIndexSSBO),
-	m_TileIndexSSBO(tileIndexSSBO),
 	m_Material(material)
 {
 	m_FullscreenMesh.AddTexture(viewSpacePositionTexture);
@@ -31,7 +30,6 @@ void TiledDeferredLightingPass::Render(std::vector<Renderable*>&)
 	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
 	m_LightSSBO->Bind(3);
 	m_LightIndexSSBO->Bind(4);
-	m_TileIndexSSBO->Bind(5);
 
 	m_Material.Bind(*m_Shader);
 
