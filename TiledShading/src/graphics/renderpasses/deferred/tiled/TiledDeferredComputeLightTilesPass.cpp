@@ -24,6 +24,7 @@ TiledDeferredComputeLightTilesPass::TiledDeferredComputeLightTilesPass(
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
 
 	memset(m_LightIndices, 0, sizeof(m_LightIndices));
+	m_LightIndexSSBO->SetData(m_LightIndices, sizeof(m_LightIndices));
 }
 
 TiledDeferredComputeLightTilesPass::~TiledDeferredComputeLightTilesPass()
@@ -33,7 +34,30 @@ TiledDeferredComputeLightTilesPass::~TiledDeferredComputeLightTilesPass()
 
 void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& renderables)
 {
-#if 1
+#ifdef USE_COMPUTE_SHADER
+	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
+	m_LightSSBO->Bind(3);
+
+	m_LightIndexSSBO->Bind(4);
+
+	m_LeftPlanesSSBO->Bind(10);
+	m_RightPlanesSSBO->Bind(11);
+	m_BottomPlanesSSBO->Bind(12);
+	m_TopPlanesSSBO->Bind(13);
+	m_Shader->SetUniform1f("u_LightFalloffThreshold", sqrt(g_LightIntensityMultiplier / g_LightFalloffThreshold));
+	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
+	m_Shader->DispatchComputeShader(g_NumTileCols, g_NumTileRows, 1);
+
+	//GLCall(glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT));
+	//
+	//m_LightIndexSSBO->Bind();
+	//GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_LightIndices), m_LightIndices));
+	//
+	//int indices[g_MaxNumLightsPerTile];
+	//memcpy(indices, m_LightIndices, sizeof(indices));
+
+#else
+
 	int tilePixels[g_NumTileRows * g_NumTileCols];
 	float tileMinDepth[g_NumTileRows * g_NumTileCols];
 	float tileMaxDepth[g_NumTileRows * g_NumTileCols];
@@ -52,24 +76,5 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 
 	m_TileGrid.ComputeLightTiles((Light*)g_LightGrid, g_LightGridSize * g_LightGridSize, tileMinDepth, tileMaxDepth, *m_LightIndexSSBO);
 
-#else
-
-	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
-	m_LightSSBO->Bind(3);
-	
-	m_LightIndexSSBO->SetData(m_LightIndices, sizeof(m_LightIndices));
-	m_LightIndexSSBO->Bind(4);
-
-	m_LeftPlanesSSBO->Bind(10);
-	m_RightPlanesSSBO->Bind(11);
-	m_BottomPlanesSSBO->Bind(12);
-	m_TopPlanesSSBO->Bind(13);
-	m_Shader->SetUniform1f("u_LightFalloffThreshold", g_LightFalloffThreshold / g_LightIntensityMultiplier);
-	m_Shader->DispatchComputeShader(g_NumTileCols, g_NumTileRows, 1);
-
-	GLCall(glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT));
-	
-	m_LightIndexSSBO->Bind();
-	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_LightIndices), m_LightIndices));
 #endif
 }

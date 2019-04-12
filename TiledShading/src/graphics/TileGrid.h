@@ -15,6 +15,8 @@ public:
 
 	void ComputeLightTiles(Light* lights, int numLights, float* tileMinDepth, float* tileMaxDepth, GLShaderStorageBuffer& lightIndexSSBO);
 
+	void GetLightBounds(const Light& light, float r, float nearZ, vec2& L, vec2& U) const;
+
 public:
 	// Memory layout
 	// [ 3, 4, 5 ]

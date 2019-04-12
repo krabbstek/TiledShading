@@ -60,6 +60,7 @@ workspace "TiledShading"
 
         defines {
             "IMGUI_IMPL_OPENGL_LOADER_GLAD",
+            "USE_COMPUTE_SHADER",
         }
 
         filter "system:windows"
