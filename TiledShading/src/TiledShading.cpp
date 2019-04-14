@@ -80,17 +80,20 @@ int main()
 		Cube cubeGrid[g_CubeGridSize][g_CubeGridSize];
 		for (int x = 0; x < g_CubeGridSize; x++)
 			for (int z = 0; z < g_CubeGridSize; z++)
-				cubeGrid[x][z].position = vec3(2.0f * (x - 4.0f), 0.0f, 2.0f * (z - 4.0f));
+				//cubeGrid[x][z].position = vec3(2.0f * (x - 4.0f), 0.0f, 2.0f * (z - 4.0f));
+				cubeGrid[x][z].position = vec3(16.0f / (g_CubeGridSize - 1) * (x - 0.5f * (g_CubeGridSize - 1)), 0.0f, 16.0f / (g_CubeGridSize - 1) * (z - 0.5f * (g_CubeGridSize - 1)));
 		PlaneMesh planeMesh({ 0.0f, -0.5f, 0.0f }, { 24.0f, 24.0f });
 
+		g_Lights.globalLight.color = vec4(g_GlobalLightIntensity, g_GlobalLightIntensity, g_GlobalLightIntensity, 1.0f);
+		g_Lights.globalLight.viewSpacePosition = V * g_GlobalLightPosition;
 		for (int x = 0; x < g_LightGridSize; x++)
 		{
 			for (int z = 0; z < g_LightGridSize; z++)
 			{
 				g_LightColors[x][z] = vec3(float(rand()) * (1.0f / float(RAND_MAX)), float(rand()) * (1.0f / float(RAND_MAX)), float(rand()) * (1.0f / float(RAND_MAX)));
-				g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
+				g_Lights.lightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
 
-				g_LightGrid[x][z].viewSpacePosition = V * vec4(g_LightGridScale.x * (x - (g_LightGridSize - 1) / 2) + g_LightGridOffset.x, g_LightGridOffset.y, g_LightGridScale.y * (z - (g_LightGridSize - 1) / 2) + g_LightGridOffset.z, 1.0f);;
+				g_Lights.lightGrid[x][z].viewSpacePosition = V * vec4(g_LightGridScale.x * (x - (g_LightGridSize - 1) / 2) + g_LightGridOffset.x, g_LightGridOffset.y, g_LightGridScale.y * (z - (g_LightGridSize - 1) / 2) + g_LightGridOffset.z, 1.0f);;
 			}
 		}
 
@@ -144,6 +147,8 @@ int main()
 			float dt = float((currentTime - prevTime).count()) * 1e-9f;
 			prevTime = currentTime;
 
+			g_Lights.globalLight.color = vec4(g_GlobalLightIntensity, g_GlobalLightIntensity, g_GlobalLightIntensity, g_LightFalloffThreshold / g_GlobalLightIntensity);
+			g_Lights.globalLight.viewSpacePosition = V * g_GlobalLightPosition;
 			if (g_DynamicLights)
 			{
 				g_Time += dt;
@@ -152,9 +157,9 @@ int main()
 				{
 					for (int z = 0; z < g_LightGridSize; z++)
 					{
-						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
+						g_Lights.lightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, g_LightFalloffThreshold / g_LightIntensityMultiplier);
 
-						g_LightGrid[x][z].viewSpacePosition = V * mat4::RotateY(0.3f * g_Time) * vec4(g_LightGridScale.x * (x - (g_LightGridSize - 1) / 2) + g_LightGridOffset.x, g_LightGridOffset.y, g_LightGridScale.y * (z - (g_LightGridSize - 1) / 2) + g_LightGridOffset.z, 1.0f);
+						g_Lights.lightGrid[x][z].viewSpacePosition = V * mat4::RotateY(0.3f * g_Time) * vec4(g_LightGridScale.x * (x - (g_LightGridSize - 1) / 2) + g_LightGridOffset.x, g_LightGridOffset.y, g_LightGridScale.y * (z - (g_LightGridSize - 1) / 2) + g_LightGridOffset.z, 1.0f);
 					}
 				}
 			}
@@ -162,7 +167,7 @@ int main()
 			{
 				for (int x = 0; x < g_LightGridSize; x++)
 					for (int z = 0; z < g_LightGridSize; z++)
-						g_LightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
+						g_Lights.lightGrid[x][z].color = vec4(g_LightIntensityMultiplier * g_LightColors[x][z].r, g_LightIntensityMultiplier * g_LightColors[x][z].g, g_LightIntensityMultiplier * g_LightColors[x][z].b, 1.0f);
 			}
 
 			// Render
@@ -250,7 +255,13 @@ void ImGuiRender()
 
 	ImGui::Separator();
 
-	ImGui::Text("Light");
+	ImGui::Text("Global light");
+	ImGui::SliderFloat("Global light intensity multiplier", &g_GlobalLightIntensity, 0.0f, 10000.0f, "%.2f", 3.0f);
+	ImGui::SliderFloat3("Global light position ", &g_GlobalLightPosition.x, -25.0f, 25.0f, "%.1f", 1.0f);
+
+	ImGui::Separator();
+
+	ImGui::Text("Light grid");
 	ImGui::Checkbox("Dynamic lights", &g_DynamicLights);
 	ImGui::SliderFloat("Light intensity multiplier", &g_LightIntensityMultiplier, 0.0f, 100.0f, "%.2f", 3.0f);
 	ImGui::SliderFloat("Light falloff threshold", &g_LightFalloffThreshold, 0.001f, 0.1f, "%.3f", 2.0f);
@@ -301,7 +312,7 @@ void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer)
 	std::shared_ptr<StopTimerPass> stopTotalRenderTimePass = std::make_shared<StopTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
-	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
+	plotTimersPass->AddLargeTimer("Total render time", totalRenderTimer);
 
 	// Render technique
 	std::shared_ptr<RenderTechnique> forwardRendering = std::make_shared<RenderTechnique>();
@@ -368,10 +379,10 @@ void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_pt
 	std::shared_ptr<StopTimerPass> stopTotalRenderTimePass = std::make_shared<StopTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
-	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
-	plotTimersPass->AddTimer("Prepass render time", prepassTimer);
-	plotTimersPass->AddTimer("Tile lighting computation time", deferredTileLightingComputationTimer);
-	plotTimersPass->AddTimer("Lighting pass render time", lightingPassTimer);
+	plotTimersPass->AddLargeTimer("Total render time", totalRenderTimer);
+	plotTimersPass->AddSmallTimer("Prepass render time", prepassTimer);
+	plotTimersPass->AddSmallTimer("Tile lighting computation time", deferredTileLightingComputationTimer);
+	plotTimersPass->AddSmallTimer("Lighting pass render time", lightingPassTimer);
 
 	// Create RenderTechnique
 	std::shared_ptr<RenderTechnique> deferredRendering = std::make_shared<RenderTechnique>();
@@ -494,10 +505,10 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 	std::shared_ptr<StopTimerPass> stopTotalRenderTimePass = std::make_shared<StopTimerPass>(renderer, totalRenderTimer);
 
 	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
-	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
-	plotTimersPass->AddTimer("Prepass render time", prepassTimer);
-	plotTimersPass->AddTimer("Tile lighting computation time", deferredTileLightingComputationTimer);
-	plotTimersPass->AddTimer("Lighting pass render time", lightingPassTimer);
+	plotTimersPass->AddLargeTimer("Total render time", totalRenderTimer);
+	plotTimersPass->AddSmallTimer("Prepass render time", prepassTimer);
+	plotTimersPass->AddSmallTimer("Tile lighting computation time", deferredTileLightingComputationTimer);
+	plotTimersPass->AddSmallTimer("Lighting pass render time", lightingPassTimer);
 
 	// Create RenderTechnique
 	std::shared_ptr<RenderTechnique> tiledDeferredRendering = std::make_shared<RenderTechnique>();

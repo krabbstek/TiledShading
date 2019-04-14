@@ -5,7 +5,6 @@
 layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 
 uniform int u_MaxNumLightsPerTile = 256;
-uniform float u_LightFalloffThreshold;
 uniform float u_FarPlaneDepth;
 
 shared int tileLightCount;
@@ -86,7 +85,7 @@ void main()
 	Plane bottomPlane = bottomPlanes[tileRow];
 	Plane topPlane = topPlanes[tileRow];
 	float planeDistance;
-	float threshold = -u_LightFalloffThreshold;
+	float threshold;
 
 	if (gl_LocalInvocationIndex == 0)
 	{
@@ -120,6 +119,7 @@ void main()
 	for (int i = int(gl_LocalInvocationIndex); i < numLights; i += threadsPerTile)
 	{
 		light = lights[i];
+		threshold = -1.0 / sqrt(light.color.a);
 		
 		planeDistance = PlaneDistance(leftPlane, light.viewSpacePosition);
 		if (planeDistance <= threshold)
@@ -136,7 +136,7 @@ void main()
 			continue;
 
 		planeDistance = light.viewSpacePosition.z - maxDepth;
-		if (planeDistance >= u_LightFalloffThreshold)
+		if (planeDistance >= -threshold)
 			continue;
 
 		planeDistance = light.viewSpacePosition.z - minDepth;

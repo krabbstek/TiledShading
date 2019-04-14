@@ -7,8 +7,6 @@ in vec3 viewSpaceNormal;
 
 out vec3 out_Color;
 
-uniform float u_LightFalloffThreshold;
-
 uniform struct Material
 {
 	vec4 albedo;
@@ -68,7 +66,8 @@ void main()
 	for (int i = 0; i < numLights; i++)
 	{
 		vec3 wi = lights[i].viewSpacePosition.xyz - viewSpacePosition;
-		float inv_d2 = max(1.0 / dot(wi, wi) - u_LightFalloffThreshold, 0.0);
+		float lightThreshold = lights[i].color.a;
+		float inv_d2 = max(1.0 / dot(wi, wi) - lightThreshold, 0.0);
 		wi = normalize(wi);
 		float n_wi = dot(n, wi);
 		if (n_wi <= 0.0)
