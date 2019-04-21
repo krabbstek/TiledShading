@@ -9,6 +9,7 @@ public:
 	~GLShaderStorageBuffer();
 
 	void SetData(const void* data, unsigned int size);
+	void SetSubData(const void* data, unsigned int offset, unsigned int size);
 
 	void Bind() const;
 	void Bind(unsigned int binding) const;

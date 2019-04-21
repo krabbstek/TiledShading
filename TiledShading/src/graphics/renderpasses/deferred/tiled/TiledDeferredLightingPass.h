@@ -14,6 +14,7 @@ public:
 		std::shared_ptr<GLTexture2D> viewSpacePositionTexture,
 		std::shared_ptr<GLTexture2D> viewSpaceNormalTexture,
 		std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO,
+		std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO,
 		const Material& material);
 	~TiledDeferredLightingPass();
 
@@ -24,6 +25,7 @@ protected:
 	std::shared_ptr<GLTexture2D> m_ViewSpaceNormalTexture;
 	std::shared_ptr<GLShaderStorageBuffer> m_LightSSBO;
 	std::shared_ptr<GLShaderStorageBuffer> m_LightIndexSSBO;
+	std::shared_ptr<GLShaderStorageBuffer> m_TileIndexSSBO;
 	const Material& m_Material;
 	FullscreenMesh m_FullscreenMesh;
 };

@@ -26,6 +26,12 @@ struct Light
 	vec4 color;
 };
 
+struct TileLights
+{
+	int offset;
+	int lightCount;
+};
+
 /// Lights, containing view space position and color
 layout (std430, binding = 3) buffer LightBuffer
 {
@@ -35,7 +41,14 @@ layout (std430, binding = 3) buffer LightBuffer
 /// Integer array containing pure indices to above lights
 layout (std430, binding = 4) buffer LightIndexBuffer
 {
+	int totalNumberOfIndices;
 	int lightIndices[];
+};
+
+/// Integer array of tile indices in lightIndices
+layout (std430, binding = 5) readonly buffer TileIndexBuffer
+{
+	TileLights tileLights[];
 };
 
 
@@ -75,7 +88,7 @@ void main()
 	vec3 wo = -normalize(viewSpacePosition);
 
 	ivec2 tileCoords = texCoords / u_TileSize;
-	int tileIndex = TileIndex(tileCoords.x, tileCoords.y) * u_MaxNumLightsPerTile;
+	int tileIndex = TileIndex(tileCoords.x, tileCoords.y);
 	int index;
 
 	vec3 dielectricTerm = vec3(0.0);
@@ -84,9 +97,11 @@ void main()
 
 	vec3 diffuseTermPreComp = u_Material.albedo.rgb * (1.0 / PI);
 
-	for (int i = 0; i < u_MaxNumLightsPerTile; i++)
+	int lightIndicesOffset = tileLights[tileIndex].offset;
+	int numLights = tileLights[tileIndex].lightCount;
+	for (int i = 0; i < numLights; i++)
 	{
-		index = lightIndices[tileIndex + i];
+		index = lightIndices[lightIndicesOffset + i];
 		if (index < 0)
 			break;
 

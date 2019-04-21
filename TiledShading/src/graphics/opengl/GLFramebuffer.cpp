@@ -75,7 +75,8 @@ void GLFramebuffer::AttachTexture(GLTexture2D& texture, GLuint internalFormat, G
 	Bind();
 	GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + attachment, GL_TEXTURE_2D, texture.m_RendererID, 0));
 
-	GLCall(GLenum error = glCheckFramebufferStatus(GL_FRAMEBUFFER));
+	GLenum error;
+	GLCall(error = glCheckFramebufferStatus(GL_FRAMEBUFFER));
 	if (error != GL_FRAMEBUFFER_COMPLETE)
 	{
 		std::printf("Failed to attach color buffer!");
@@ -120,8 +121,9 @@ void GLFramebuffer::SetDrawBufferAttachments(unsigned int count) const
 
 void GLFramebuffer::SetDrawBufferAttachments(const GLenum* attachments, unsigned int count) const
 {
+	GLenum error;
 	GLCall(glDrawBuffers(count, attachments));
-	GLCall(GLenum error = glCheckNamedFramebufferStatus(m_FramebufferRendererID, GL_FRAMEBUFFER));
+	GLCall(error = glCheckNamedFramebufferStatus(m_FramebufferRendererID, GL_FRAMEBUFFER));
 	if (error != GL_FRAMEBUFFER_COMPLETE)
 	{
 		std::printf("Failed to set drawbuffer attachments");

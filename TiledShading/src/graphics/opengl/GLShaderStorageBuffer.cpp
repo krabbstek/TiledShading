@@ -6,16 +6,13 @@ GLShaderStorageBuffer::GLShaderStorageBuffer(const void* data, unsigned int size
 	: m_RendererID(0), m_Size(size)
 {
 	GLCall(glGenBuffers(1, &m_RendererID));
-	if (data && size)
-		SetData(data, size);
+	SetData(data, size);
 }
 
 GLShaderStorageBuffer::~GLShaderStorageBuffer()
 {
 	if (m_RendererID)
-	{
 		GLCall(glDeleteBuffers(1, &m_RendererID));
-	}
 }
 
 
@@ -24,6 +21,12 @@ void GLShaderStorageBuffer::SetData(const void* data, unsigned int size)
 	Bind();
 	GLCall(glBufferData(GL_SHADER_STORAGE_BUFFER, size, data, GL_DYNAMIC_DRAW));
 	m_Size = size;
+}
+
+void GLShaderStorageBuffer::SetSubData(const void* data, unsigned int offset, unsigned int size)
+{
+	Bind();
+	GLCall(glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset, size, data));
 }
 
 

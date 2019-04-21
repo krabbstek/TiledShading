@@ -4,12 +4,10 @@
 
 #include <iostream>
 
-TiledDeferredPrepass::TiledDeferredPrepass(Renderer& renderer, std::shared_ptr<GLShader> shader, std::shared_ptr<GLTexture2D> viewSpacePositionTexture, std::shared_ptr<GLTexture2D> viewSpaceNormalTexture, std::shared_ptr<GLImageTexture2D> tileMinImageTexture, std::shared_ptr<GLImageTexture2D> tileMaxImageTexture)
+TiledDeferredPrepass::TiledDeferredPrepass(Renderer& renderer, std::shared_ptr<GLShader> shader, std::shared_ptr<GLTexture2D> viewSpacePositionTexture, std::shared_ptr<GLTexture2D> viewSpaceNormalTexture)
 	: RenderPass(renderer, shader),
 	m_ViewSpacePositionTexture(viewSpacePositionTexture),
-	m_ViewSpaceNormalTexture(viewSpaceNormalTexture),
-	m_TileMinImageTexture(tileMinImageTexture),
-	m_TileMaxImageTexture(tileMaxImageTexture)
+	m_ViewSpaceNormalTexture(viewSpaceNormalTexture)
 {
 	GLCall(glGenFramebuffers(1, &m_PrepassFramebuffer));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, m_PrepassFramebuffer));
@@ -45,8 +43,6 @@ void TiledDeferredPrepass::Render(std::vector<Renderable*>& renderables)
 	m_Shader->SetUniform1f("u_FarDepth", g_FarPlaneDepth);
 
 	m_Shader->Bind();
-	m_TileMinImageTexture->Bind(3);
-	m_TileMaxImageTexture->Bind(4);
 
 	RenderPass::Render(renderables);
 }
