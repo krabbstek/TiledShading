@@ -166,7 +166,6 @@ void main()
 			
 		// If light passed all planes and depth tests: add to list of lights
 		id = min(atomicAdd(s_TileLightCount, 1), u_MaxNumLightsPerTile - 1);
-		//lightIndices[lightIndicesOffset + id] = i;
 		s_TileLightIndices[id] = i;
 	}
 
@@ -187,9 +186,6 @@ void main()
 
 	if (gl_LocalInvocationIndex == 0)
 	{	
-		/*if (tileLightCount < u_MaxNumLightsPerTile - 1)
-			lightIndices[lightIndicesOffset + tileLightCount] = -1;*/
-
 		TileLights currentTile;
 		currentTile.offset = s_LightIndicesOffset;
 		currentTile.lightCount = numLights;
