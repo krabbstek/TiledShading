@@ -78,7 +78,6 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 	float planeDistance;
 	vec2 L, U;
 	const float invTanPerTile = 0.5f * float(g_NumTileRows) / g_FOV;
-	int lowX, lowY, highX, highY;
 
 	// Clear the lights in each tile
 	for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
