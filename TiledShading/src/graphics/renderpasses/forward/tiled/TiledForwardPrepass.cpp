@@ -11,14 +11,22 @@ TiledForwardPrepass::TiledForwardPrepass(Renderer& renderer, std::shared_ptr<GLS
 	GLCall(glGenFramebuffers(1, &m_PrepassFramebuffer));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, m_PrepassFramebuffer));
 
-	GLCall(glGenRenderbuffers(1, &m_PrepassDepthStencilRenderbuffer));
-	GLCall(glBindRenderbuffer(GL_RENDERBUFFER, m_PrepassDepthStencilRenderbuffer));
-	GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, g_WindowWidth, g_WindowHeight));
-	GLCall(glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_PrepassDepthStencilRenderbuffer));
+	GLCall(glGenRenderbuffers(1, &m_ForwardDepthRenderbuffer));
+	GLCall(glBindRenderbuffer(GL_RENDERBUFFER, m_ForwardDepthRenderbuffer));
+	GLCall(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, g_WindowWidth, g_WindowHeight));
+	GLCall(glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_ForwardDepthRenderbuffer));
 
 	GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ViewSpaceDepthTexture->RendererID(), 0));
 	GLenum attachments = GL_COLOR_ATTACHMENT0;
 	GLCall(glDrawBuffers(1, &attachments));
+
+	GLenum status;
+	GLCall(status = glCheckFramebufferStatus(GL_FRAMEBUFFER));
+	if (status != GL_FRAMEBUFFER_COMPLETE)
+	{
+		std::printf("Framebuffer incomplete!\n");
+		__debugbreak();
+	}
 
 	m_Shader->SetUniform1i("u_TileSize", g_TileSize);
 	m_Shader->SetUniform1f("u_NearDepth", g_NearPlaneDepth);
@@ -27,8 +35,8 @@ TiledForwardPrepass::TiledForwardPrepass(Renderer& renderer, std::shared_ptr<GLS
 
 TiledForwardPrepass::~TiledForwardPrepass()
 {
-	GLCall(glDeleteRenderbuffers(1, &m_PrepassDepthStencilRenderbuffer));
-	m_PrepassDepthStencilRenderbuffer = 0;
+	GLCall(glDeleteRenderbuffers(1, &m_ForwardDepthRenderbuffer));
+	m_ForwardDepthRenderbuffer = 0;
 
 	GLCall(glDeleteFramebuffers(1, &m_PrepassFramebuffer));
 	m_PrepassFramebuffer = 0;

@@ -16,5 +16,5 @@ public:
 protected:
 	std::shared_ptr<GLTexture2D> m_ViewSpaceDepthTexture;
 	GLuint m_PrepassFramebuffer;
-	GLuint m_PrepassDepthStencilRenderbuffer;
+	GLuint m_ForwardDepthRenderbuffer;
 };
