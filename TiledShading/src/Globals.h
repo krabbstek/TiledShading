@@ -19,4 +19,6 @@ extern vec3 g_LightGridOffset;
 extern vec2 g_LightGridScale;
 extern bool g_DynamicLights;
 
+extern float g_HeatmapAlpha;
+
 extern float g_Time;

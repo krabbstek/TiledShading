@@ -1,8 +1,8 @@
-#include "TiledDeferredLightingPass.h"
+#include "ClusteredDeferredLightingPass.h"
 
 #include "Globals.h"
 
-TiledDeferredLightingPass::TiledDeferredLightingPass(Renderer& renderer, std::shared_ptr<GLShader> shader, std::shared_ptr<GLTexture2D> viewSpacePositionTexture, std::shared_ptr<GLTexture2D> viewSpaceNormalTexture, std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO, std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO, const Material& material)
+ClusteredDeferredLightingPass::ClusteredDeferredLightingPass(Renderer& renderer, std::shared_ptr<GLShader> shader, std::shared_ptr<GLTexture2D> viewSpacePositionTexture, std::shared_ptr<GLTexture2D> viewSpaceNormalTexture, std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO, std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO, const Material& material)
 	: RenderPass(renderer, shader),
 	m_ViewSpacePositionTexture(viewSpacePositionTexture),
 	m_ViewSpaceNormalTexture(viewSpaceNormalTexture),
@@ -17,12 +17,12 @@ TiledDeferredLightingPass::TiledDeferredLightingPass(Renderer& renderer, std::sh
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
 }
 
-TiledDeferredLightingPass::~TiledDeferredLightingPass()
+ClusteredDeferredLightingPass::~ClusteredDeferredLightingPass()
 {
 }
 
 
-void TiledDeferredLightingPass::Render(std::vector<Renderable*>&)
+void ClusteredDeferredLightingPass::Render(std::vector<Renderable*>&)
 {
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, 0));
 	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));

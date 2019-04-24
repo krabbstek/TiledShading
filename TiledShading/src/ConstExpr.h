@@ -5,7 +5,7 @@
 constexpr unsigned int g_WindowWidth = 1280;
 constexpr unsigned int g_WindowHeight = 720;
 
-constexpr unsigned int g_TileSize = 20;
+constexpr unsigned int g_TileSize = 10;
 
 constexpr int g_NumTileCols = g_WindowWidth / g_TileSize;
 constexpr int g_NumTileRows = g_WindowHeight / g_TileSize;

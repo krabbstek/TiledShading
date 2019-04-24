@@ -10,8 +10,7 @@ uniform mat4 u_MVP = mat4(1.0);
 void main()
 {
 	vec4 row = transpose(u_MV)[2];
-	//viewSpaceDepth = dot(row, in_Position);
-	viewSpaceDepth = (u_MV * in_Position).z;
+	viewSpaceDepth = dot(row, in_Position);
 
 	gl_Position = u_MVP * in_Position;
 }

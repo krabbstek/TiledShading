@@ -52,6 +52,8 @@ void TiledForwardLightingPass::Render(std::vector<Renderable*>& renderables)
 	GLCall(glClear(GL_COLOR_BUFFER_BIT));
 
 	m_Shader->Bind();
+	m_Shader->SetUniform1f("u_HeatmapAlpha", g_HeatmapAlpha);
+
 	m_LightSSBO->SetData(&g_Lights, sizeof(g_Lights));
 	m_LightSSBO->Bind(3);
 	m_LightIndexSSBO->Bind(4);
