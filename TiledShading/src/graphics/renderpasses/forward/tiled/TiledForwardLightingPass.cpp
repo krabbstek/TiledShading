@@ -33,6 +33,7 @@ TiledForwardLightingPass::TiledForwardLightingPass(Renderer& renderer, std::shar
 	}
 
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
+	m_Shader->SetUniform1i("u_TileSize", g_TileSize);
 }
 
 TiledForwardLightingPass::~TiledForwardLightingPass()

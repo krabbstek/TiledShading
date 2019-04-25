@@ -1,12 +1,13 @@
 #version 430 core
 
-#define TILE_SIZE 10
+#define TILE_SIZE 20
 
 #define BIT(x) (1 << x)
 
 layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 
 uniform int u_MaxNumLightsPerTile = 256;
+uniform float u_NearPlaneDepth;
 uniform float u_FarPlaneDepth;
 
 uniform mat4 u_ProjectionMatrix;
@@ -110,7 +111,27 @@ uint DepthMaskBit(vec4 viewSpacePosition)
 
 uint LightDepthMask(vec4 viewSpacePosition, float radius)
 {
-	return ~0;
+	float nearDepth = viewSpacePosition.z + radius;
+	float farDepth = viewSpacePosition.z - radius;
+	// Return 0 if light is outside view frustum
+	/*if (nearDepth <= -u_FarPlaneDepth || farDepth >= -u_NearPlaneDepth)
+		return 0;*/
+
+	viewSpacePosition.w = 1.0;
+
+	uint depthMask = ~0;
+
+	vec4 nearClipSpacePosition = u_ProjectionMatrix * (viewSpacePosition + vec4(0.0, 0.0, radius, 0.0));
+	nearDepth = nearClipSpacePosition.z / nearClipSpacePosition.w;
+	int nearDepthIndex = max(int((nearDepth + 1.0) * 16.0), 0);
+	depthMask = (depthMask >> nearDepthIndex) << nearDepthIndex;
+
+	vec4 farClipSpacePosition = u_ProjectionMatrix * (viewSpacePosition - vec4(0.0, 0.0, radius, 0.0));
+	farDepth = farClipSpacePosition.z / farClipSpacePosition.w;
+	int farDepthIndex = 31 - min(int((farDepth + 1.0) * 16.0), 31);
+	//depthMask = (depthMask << farDepthIndex) >> farDepthIndex;
+
+	return depthMask;
 }
 
 void main()
@@ -144,38 +165,46 @@ void main()
 	barrier();
 
 	// Compute depth mask
-	atomicOr(s_DepthMask, DepthMaskBit(texelFetch(u_ViewSpacePositionTexture, texCoords, 0)));
+	vec4 viewSpacePosition = texelFetch(u_ViewSpacePositionTexture, texCoords, 0);
+	if (viewSpacePosition.z < 0.0)
+		atomicOr(s_DepthMask, DepthMaskBit(viewSpacePosition));
 
 	barrier();
 
-	int id;
 	int numLights = lights.length();
-	Light light;
-	for (int i = int(gl_LocalInvocationIndex); i < numLights; i += threadsPerTile)
+	if (s_DepthMask != 0)
 	{
-		light = lights[i];
-		radius = 1.0 / sqrt(light.color.a);
-		threshold = -radius;
+		int id;
+		uint depthMask;
+		Light light;
+		for (int i = int(gl_LocalInvocationIndex); i < numLights; i += threadsPerTile)
+		{
+			light = lights[i];
+			radius = 1.0 / sqrt(light.color.a);
+			threshold = -radius;
 		
-		planeDistance = PlaneDistance(leftPlane, light.viewSpacePosition);
-		if (planeDistance <= threshold)
-			continue;
-		planeDistance = PlaneDistance(rightPlane, light.viewSpacePosition);
-		if (planeDistance <= threshold)
-			continue;
+			planeDistance = PlaneDistance(leftPlane, light.viewSpacePosition);
+			if (planeDistance <= threshold)
+				continue;
+			planeDistance = PlaneDistance(rightPlane, light.viewSpacePosition);
+			if (planeDistance <= threshold)
+				continue;
 
-		planeDistance = PlaneDistance(bottomPlane, light.viewSpacePosition);
-		if (planeDistance <= threshold)
-			continue;
-		planeDistance = PlaneDistance(topPlane, light.viewSpacePosition);
-		if (planeDistance <= threshold)
-			continue;
+			planeDistance = PlaneDistance(bottomPlane, light.viewSpacePosition);
+			if (planeDistance <= threshold)
+				continue;
+			planeDistance = PlaneDistance(topPlane, light.viewSpacePosition);
+			if (planeDistance <= threshold)
+				continue;
 
-
+			depthMask = LightDepthMask(light.viewSpacePosition, radius) & s_DepthMask;
+			if (depthMask == 0)
+				continue;
 			
-		// If light passed all planes and depth tests: add to list of lights
-		id = min(atomicAdd(s_TileLightCount, 1), u_MaxNumLightsPerTile - 1);
-		s_TileLightIndices[id] = i;
+			// If light passed all planes and depth tests: add to list of lights
+			id = min(atomicAdd(s_TileLightCount, 1), u_MaxNumLightsPerTile - 1);
+			s_TileLightIndices[id] = i;
+		}
 	}
 
 	barrier();

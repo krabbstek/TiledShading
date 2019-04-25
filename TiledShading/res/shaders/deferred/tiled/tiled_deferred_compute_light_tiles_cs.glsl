@@ -1,6 +1,6 @@
 #version 430 core
 
-#define TILE_SIZE 10
+#define TILE_SIZE 20
 
 layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 
@@ -118,10 +118,13 @@ void main()
 
 	// Compute min and max depth in tile
 	float depth = texelFetch(u_ViewSpacePositionTexture, texCoords, 0).z;
-	int iDepth = int(depth * float(0x7FFFFFFF) / u_FarPlaneDepth);
+	if (depth < 0.0)
+	{
+		int iDepth = int(depth * float(0x7FFFFFFF) / u_FarPlaneDepth);
 
-	atomicMin(s_MinIDepth, iDepth);
-	atomicMax(s_MaxIDepth, iDepth);
+		atomicMin(s_MinIDepth, iDepth);
+		atomicMax(s_MaxIDepth, iDepth);
+	}
 
 	barrier();
 
