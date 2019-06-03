@@ -12,7 +12,7 @@ constexpr int g_NumTileRows = g_WindowHeight / g_TileSize;
 constexpr int g_MaxNumLightsPerTile = 1024;
 
 constexpr int g_CubeGridSize = 6;
-constexpr int g_LightGridSize = 30;
+constexpr int g_LightGridSize = 100;
 
 constexpr float g_FOV = DegToRad(75.0f);
 constexpr float g_AspectRatio = float(g_WindowWidth) / float(g_WindowHeight);
