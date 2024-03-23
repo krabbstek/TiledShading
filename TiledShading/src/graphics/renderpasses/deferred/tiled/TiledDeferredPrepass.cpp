@@ -49,15 +49,4 @@ void TiledDeferredPrepass::Render(std::vector<Renderable*>& renderables)
 	m_TileMaxImageTexture->Bind(4);
 
 	RenderPass::Render(renderables);
-
-	int pixels[g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
-	float pixels_f[g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
-
-	GLCall(glBindTexture(GL_TEXTURE_2D, m_TileMaxImageTexture->RendererID()));
-	GLCall(glGetTexImage(GL_TEXTURE_2D, 0, GL_RED_INTEGER, GL_INT, pixels));
-
-	for (int i = 0; i < (sizeof(pixels) / sizeof(int)); i++)
-		pixels_f[i] = float(pixels[i]) * (g_FarPlaneDepth / float(0x7FFFFFFF));
-
-	std::printf("%p\n", glGetTextureImage);
 }

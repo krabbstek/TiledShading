@@ -1,7 +1,6 @@
 #pragma once
 
-#include "../../RenderPass.h"
-
+#include "graphics/RenderPass.h"
 #include "graphics/opengl/OpenGL.h"
 
 class TiledDeferredPrepass : public RenderPass

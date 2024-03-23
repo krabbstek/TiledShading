@@ -1,6 +1,7 @@
 #include "PlotTimersPass.h"
 
 #include "imgui.h"
+#include <sstream>
 
 PlotTimersPass::PlotTimersPass(Renderer& renderer)
 	: RenderPass(renderer, std::shared_ptr<GLShader>())
@@ -31,5 +32,7 @@ void PlotTimersPass::Render(std::vector<Renderable*>&)
 void PlotTimersPass::PlotCyclicData(const char* label, float* data, unsigned int dataLength, unsigned int offset)
 {
 	ImGui::Text(label);
-	ImGui::PlotLines("", [](void* data, int idx) { return ((float*)data)[idx]; }, data, dataLength, offset, NULL, 0, FLT_MAX, ImVec2(g_GraphSizeX, g_GraphSizeY));
+	std::stringstream ss;
+	ss << data[(offset - 1) % dataLength] << " ms";
+	ImGui::PlotLines(ss.str().c_str(), [](void* data, int idx) { return ((float*)data)[idx]; }, data, dataLength, offset, NULL, 0, FLT_MAX, ImVec2(g_GraphSizeX, g_GraphSizeY));
 }
