@@ -1,10 +1,11 @@
-﻿#include "Cube.h"
-#include "Plane.h"
+﻿#include "Plane.h"
 #include "graphics/Light.h"
 #include "graphics/Material.h"
 #include "graphics/Renderer.h"
 #include "graphics/opengl/OpenGL.h"
 #include "math/math.h"
+#include "meshes/Cube.h"
+#include "meshes/PlaneMesh.h"
 
 #include <chrono>
 #include <iostream>
@@ -64,19 +65,6 @@ unsigned int fullscreenIndices[] =
 	0, 2, 3,
 };
 
-float planeVertices[] =
-{
-	-12.0f, -0.5f, -12.0f,  0.0f, 1.0f, 0.0f,  0.67f, 0.94f, 0.36f,
-	 12.0f, -0.5f, -12.0f,  0.0f, 1.0f, 0.0f,  0.67f, 0.94f, 0.36f,
-	 12.0f, -0.5f,  12.0f,  0.0f, 1.0f, 0.0f,  0.67f, 0.94f, 0.36f,
-	-12.0f, -0.5f,  12.0f,  0.0f, 1.0f, 0.0f,  0.67f, 0.94f, 0.36f,
-};
-unsigned int planeIndices[] =
-{
-	0, 1, 2,
-	0, 2, 3,
-};
-
 vec3 lightGridOffset = vec3(0.0f, 0.6f, 0.0f);
 vec2 lightGridScale = vec2(0.7f); //(3.5f);
 float lightIntensity = 0.1f; // 3.0f;
@@ -122,9 +110,6 @@ GLIndexBuffer* fullscreenIBO;
 GLShaderStorageBuffer* lightSSBO;
 GLShaderStorageBuffer* lightIndexSSBO;
 GLShaderStorageBuffer* tileIndexSSBO;
-GLVertexBuffer* planeVBO;
-GLVertexArray* planeVAO;
-GLIndexBuffer* planeIBO;
 
 mat4 projectionMatrix;
 mat4 viewMatrix;
@@ -133,11 +118,11 @@ mat4 modelMatrix;
 Material material;
 
 int Init();
-void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE]);
-void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE]);
-void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE]);
-void RenderNonTiledDeferred(Cube (&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE]);
-void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE]);
+void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
+void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
+void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
+void RenderNonTiledDeferred(Cube (&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
+void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh);
 void ImGuiRender();
 
 int main()
@@ -193,12 +178,7 @@ int main()
 		for (int x = 0; x < CUBE_GRID_SIZE; x++)
 			for (int z = 0; z < CUBE_GRID_SIZE; z++)
 				cubeGrid[x][z].position = vec3(2.0f * (x - 4.0f), 0.0f, 2.0f * (z - 4.0f));
-		planeVBO = new GLVertexBuffer(planeVertices, sizeof(planeVertices));
-		GLVertexBufferLayout planeLayout;
-		planeLayout.Push(GL_FLOAT, 3);
-		planeLayout.Push(GL_FLOAT, 3);
-		planeLayout.Push(GL_FLOAT, 3);
-		planeVBO->SetVertexBufferLayout(planeLayout);
+		PlaneMesh planeMesh({ 0.0f, -0.5f, 0.0f }, { 24.0f, 24.0f });
 
 		for (int x = 0; x < LIGHT_GRID_SIZE; x++)
 		{
@@ -218,11 +198,6 @@ int main()
 		material.shininess = 1.0;
 		material.metalness = 0.5;
 		material.fresnel = 0.5;
-
-		planeVAO = new GLVertexArray();
-		planeVAO->AddVertexBuffer(*planeVBO);
-
-		planeIBO = new GLIndexBuffer(planeIndices, sizeof(planeIndices) / sizeof(unsigned int));
 
 		GLVertexBufferLayout fullScreenLayout;
 		fullScreenLayout.Push(GL_FLOAT, 2);
@@ -392,6 +367,9 @@ int main()
 			}
 			lightSSBO->SetData(lights, sizeof(lights));
 
+			// Render
+			//g_CurrentRenderTechnique->Render();
+
 			switch (renderMode)
 			{
 			case NONE:
@@ -401,23 +379,23 @@ int main()
 				break;
 
 			case DEPTH_ONLY:
-				RenderDepthOnly(cubeGrid);
+				RenderDepthOnly(cubeGrid, planeMesh);
 				break;
 
 			case TILE_MIN_DEPTH:
-				RenderTileMinDepth(cubeGrid);
+				RenderTileMinDepth(cubeGrid, planeMesh);
 				break;
 
 			case TILE_MAX_DEPTH:
-				RenderTileMaxDepth(cubeGrid);
+				RenderTileMaxDepth(cubeGrid, planeMesh);
 				break;
 
 			case NON_TILED_DEFERRED:
-				RenderNonTiledDeferred(cubeGrid);
+				RenderNonTiledDeferred(cubeGrid, planeMesh);
 				break;
 
 			case TILED_DEFERRED:
-				RenderTiledDeferred(cubeGrid);
+				RenderTiledDeferred(cubeGrid, planeMesh);
 				break;
 			}
 			
@@ -517,7 +495,7 @@ void ImGuiRender()
 }
 
 
-void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
+void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
@@ -527,16 +505,10 @@ void RenderDepthOnly(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 		for (int z = 0; z < 9; z++)
 			cubeGrid[x][z].Render(renderer, *depthShader);
 
-	mat4 V = renderer.camera.GetViewMatrix();
-	mat4 P = renderer.camera.projectionMatrix;
-	depthShader->SetUniformMat4("u_MV", V);
-	depthShader->SetUniformMat4("u_MVP", P * V);
-	planeVAO->Bind();
-	planeIBO->Bind();
-	GLCall(glDrawElements(GL_TRIANGLES, planeIBO->Count(), GL_UNSIGNED_INT, 0));
+	planeMesh.Render(renderer, *depthShader);
 }
 
-void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
+void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
 	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
@@ -549,19 +521,15 @@ void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	GLCall(glBindImageTexture(1, tileMaxTexture->RendererID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI));
 
 	for (int x = 0; x < 9; x++)
+	{
 		for (int z = 0; z < 9; z++)
 		{
 			cubeGrid[x][z].Render(renderer, *prepassShader);
 			GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 		}
+	}
+	planeMesh.Render(renderer, *prepassShader);
 
-	mat4 V = renderer.camera.GetViewMatrix();
-	mat4 P = renderer.camera.projectionMatrix;
-	prepassShader->SetUniformMat4("u_MV", V);
-	prepassShader->SetUniformMat4("u_MVP", P * V);
-	planeVAO->Bind();
-	planeIBO->Bind();
-	GLCall(glDrawElements(GL_TRIANGLES, planeIBO->Count(), GL_UNSIGNED_INT, 0));
 	GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 
 	GLCall(glViewport(0, 0, WINDOW_WIDTH / TILE_SIZE, WINDOW_HEIGHT / TILE_SIZE));
@@ -584,7 +552,7 @@ void RenderTileMinDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 }
 
-void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
+void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
 	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
@@ -597,19 +565,15 @@ void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	GLCall(glBindImageTexture(1, tileMaxTexture->RendererID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI));
 
 	for (int x = 0; x < 9; x++)
+	{
 		for (int z = 0; z < 9; z++)
 		{
 			cubeGrid[x][z].Render(renderer, *prepassShader);
 			GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 		}
+	}
+	planeMesh.Render(renderer, *prepassShader);
 
-	mat4 V = renderer.camera.GetViewMatrix();
-	mat4 P = renderer.camera.projectionMatrix;
-	prepassShader->SetUniformMat4("u_MV", V);
-	prepassShader->SetUniformMat4("u_MVP", P * V);
-	planeVAO->Bind();
-	planeIBO->Bind();
-	GLCall(glDrawElements(GL_TRIANGLES, planeIBO->Count(), GL_UNSIGNED_INT, 0));
 	GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT));
 
 	GLCall(glViewport(0, 0, WINDOW_WIDTH / TILE_SIZE, WINDOW_HEIGHT / TILE_SIZE));
@@ -633,7 +597,7 @@ void RenderTileMaxDepth(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 }
 
-void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
+void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
 	GLCall(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
@@ -642,15 +606,7 @@ void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	for (int x = 0; x < 9; x++)
 		for (int z = 0; z < 9; z++)
 			cubeGrid[x][z].Render(renderer, *prepassShader);
-
-	mat4 V = renderer.camera.GetViewMatrix();
-	mat4 P = renderer.camera.projectionMatrix;
-	prepassShader->SetUniformMat4("u_MV", V);
-	prepassShader->SetUniformMat4("u_MV_normal", mat4::Transpose(mat4::Inverse(V)));
-	prepassShader->SetUniformMat4("u_MVP", P * V);
-	planeVAO->Bind();
-	planeIBO->Bind();
-	GLCall(glDrawElements(GL_TRIANGLES, planeIBO->Count(), GL_UNSIGNED_INT, 0));
+	planeMesh.Render(renderer, *prepassShader);
 
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebuffer));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -669,7 +625,7 @@ void RenderNonTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 }
 
-void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
+void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE], const PlaneMesh& planeMesh)
 {
 	GLCall(glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT));
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, prepassFramebuffer));
@@ -679,15 +635,7 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 	for (int x = 0; x < 9; x++)
 		for (int z = 0; z < 9; z++)
 			cubeGrid[x][z].Render(renderer, *prepassShader);
-
-	mat4 V = renderer.camera.GetViewMatrix();
-	mat4 P = renderer.camera.projectionMatrix;
-	prepassShader->SetUniformMat4("u_MV", V);
-	prepassShader->SetUniformMat4("u_MV_normal", mat4::Transpose(mat4::Inverse(V)));
-	prepassShader->SetUniformMat4("u_MVP", P * V);
-	planeVAO->Bind();
-	planeIBO->Bind();
-	GLCall(glDrawElements(GL_TRIANGLES, planeIBO->Count(), GL_UNSIGNED_INT, 0));
+	planeMesh.Render(renderer, *prepassShader);
 
 	float lightRadius = lightRadiusMultiplier * 10.0f * sqrt(lightIntensity);
 
