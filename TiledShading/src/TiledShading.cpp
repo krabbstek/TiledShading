@@ -1,3 +1,6 @@
+#include "graphics/opengl/OpenGL.h"
+#include "math/math.h"
+
 #include <iostream>
 
 #include <glad/glad.h>
@@ -38,13 +41,13 @@ int main()
 		return -1;
 	}
 
-	glClearColor(0.67f, 0.94f, 0.36f, 0.0f);
+	GLCall(glClearColor(0.67f, 0.94f, 0.36f, 0.0f));
 
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
 		glfwSwapBuffers(window);
 	}
