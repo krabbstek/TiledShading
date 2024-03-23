@@ -3,6 +3,7 @@
 #include "ConstExpr.h"
 
 #include "graphics/Light.h"
+#include "graphics/RenderTechnique.h"
 
 extern Light g_LightGrid[g_LightGridSize][g_LightGridSize];
 

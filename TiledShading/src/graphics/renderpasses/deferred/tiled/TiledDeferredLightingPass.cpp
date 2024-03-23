@@ -25,7 +25,6 @@ void TiledDeferredLightingPass::Render(std::vector<Renderable*>&)
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
 	m_Shader->Bind();
-	m_Shader->SetUniform1f("u_Li", g_LightFalloffThreshold);
 	m_Shader->SetUniform1f("u_LightFalloffThreshold", g_LightFalloffThreshold);
 	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
 	m_LightSSBO->Bind(3);
