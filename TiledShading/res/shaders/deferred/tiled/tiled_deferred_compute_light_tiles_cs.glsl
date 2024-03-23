@@ -6,8 +6,15 @@ layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 
 uniform int u_MaxNumLightsPerTile = 256;
 uniform float u_LightFalloffThreshold;
+uniform float u_FarPlaneDepth;
 
 shared int tileLightCount;
+shared int minIDepth;
+shared int maxIDepth;
+shared float minDepth;
+shared float maxDepth;
+
+layout (binding = 0) uniform sampler2D u_ViewSpacePositionTexture;
 
 struct Light
 {
@@ -82,7 +89,28 @@ void main()
 	float threshold = -u_LightFalloffThreshold;
 
 	if (gl_LocalInvocationIndex == 0)
+	{
 		tileLightCount = 0;
+		minIDepth = 0x7FFFFFFF;
+		maxIDepth = -0x7FFFFFFF;
+	}
+
+	barrier();
+
+	ivec2 texCoords = ivec2(gl_WorkGroupID.xy * gl_WorkGroupSize.xy + gl_LocalInvocationID.xy);
+	float depth = texelFetch(u_ViewSpacePositionTexture, texCoords, 0).z;
+	int iDepth = int(depth * float(0x7FFFFFFF) / u_FarPlaneDepth);
+
+	atomicMin(minIDepth, iDepth);
+	atomicMax(maxIDepth, iDepth);
+
+	barrier();
+
+	if (gl_LocalInvocationIndex == 0)
+	{
+		minDepth = float(minIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
+		maxDepth = float(maxIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
+	}
 
 	barrier();
 
@@ -99,10 +127,19 @@ void main()
 		planeDistance = PlaneDistance(rightPlane, light.viewSpacePosition);
 		if (planeDistance <= threshold)
 			continue;
+
 		planeDistance = PlaneDistance(bottomPlane, light.viewSpacePosition);
 		if (planeDistance <= threshold)
 			continue;
 		planeDistance = PlaneDistance(topPlane, light.viewSpacePosition);
+		if (planeDistance <= threshold)
+			continue;
+
+		planeDistance = light.viewSpacePosition.z - maxDepth;
+		if (planeDistance >= u_LightFalloffThreshold)
+			continue;
+
+		planeDistance = light.viewSpacePosition.z - minDepth;
 		if (planeDistance <= threshold)
 			continue;
 			
@@ -112,13 +149,9 @@ void main()
 
 	barrier();
 
-	//lightIndices[lightIndicesOffset + gl_LocalInvocationIndex] = int(gl_LocalInvocationIndex);
-	//
 	if (gl_LocalInvocationIndex == 0)
 	{	
 		if (tileLightCount < u_MaxNumLightsPerTile - 1)
 			lightIndices[lightIndicesOffset + tileLightCount] = -1;
 	}
-
-	//lightIndices[lightIndicesOffset + u_MaxNumLightsPerTile] = -1;
 }

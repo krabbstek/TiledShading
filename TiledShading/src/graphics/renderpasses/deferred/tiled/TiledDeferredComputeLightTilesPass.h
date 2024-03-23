@@ -9,6 +9,7 @@ public:
 	TiledDeferredComputeLightTilesPass(
 		Renderer& renderer,
 		std::shared_ptr<GLShader> computeShader,
+		std::shared_ptr<GLTexture2D> viewSpacePositionTexture,
 		std::shared_ptr<GLImageTexture2D> tileMinDepthImageTexture,
 		std::shared_ptr<GLImageTexture2D> tileMaxDepthImageTexture,
 		std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO);
@@ -19,6 +20,7 @@ public:
 protected:
 	TileGrid m_TileGrid;
 	int m_LightIndices[g_NumTileRows * g_NumTileCols * g_MaxNumLightsPerTile];
+	std::shared_ptr<GLTexture2D> m_ViewSpacePositionTexture;
 	std::shared_ptr<GLImageTexture2D> m_TileMinDepthImageTexture;
 	std::shared_ptr<GLImageTexture2D> m_TileMaxDepthImageTexture;
 	std::shared_ptr<GLShaderStorageBuffer> m_LightSSBO;

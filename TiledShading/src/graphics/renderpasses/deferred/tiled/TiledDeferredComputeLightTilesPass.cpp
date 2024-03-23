@@ -7,10 +7,12 @@
 TiledDeferredComputeLightTilesPass::TiledDeferredComputeLightTilesPass(
 	Renderer& renderer,
 	std::shared_ptr<GLShader> computeShader,
+	std::shared_ptr<GLTexture2D> viewSpacePositionTexture,
 	std::shared_ptr<GLImageTexture2D> tileMinDepthImageTexture,
 	std::shared_ptr<GLImageTexture2D> tileMaxDepthImageTexture,
 	std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO)
 	: RenderPass(renderer, computeShader),
+	m_ViewSpacePositionTexture(viewSpacePositionTexture),
 	m_TileMinDepthImageTexture(tileMinDepthImageTexture),
 	m_TileMaxDepthImageTexture(tileMaxDepthImageTexture),
 	m_LightSSBO(std::make_shared<GLShaderStorageBuffer>(g_LightGrid, sizeof(g_LightGrid))),
@@ -22,6 +24,7 @@ TiledDeferredComputeLightTilesPass::TiledDeferredComputeLightTilesPass(
 	m_TopPlanesSSBO = std::make_shared<GLShaderStorageBuffer>(m_TileGrid.topPlanes, sizeof(m_TileGrid.topPlanes));
 
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
+	m_Shader->SetUniform1f("u_FarPlaneDepth", g_FarPlaneDepth);
 
 	memset(m_LightIndices, 0, sizeof(m_LightIndices));
 	m_LightIndexSSBO->SetData(m_LightIndices, sizeof(m_LightIndices));
@@ -35,6 +38,8 @@ TiledDeferredComputeLightTilesPass::~TiledDeferredComputeLightTilesPass()
 void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& renderables)
 {
 #ifdef USE_COMPUTE_SHADER
+	m_ViewSpacePositionTexture->Bind(0);
+	
 	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
 	m_LightSSBO->Bind(3);
 
@@ -47,14 +52,6 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 	m_Shader->SetUniform1f("u_LightFalloffThreshold", sqrt(g_LightIntensityMultiplier / g_LightFalloffThreshold));
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
 	m_Shader->DispatchComputeShader(g_NumTileCols, g_NumTileRows, 1);
-
-	//GLCall(glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT));
-	//
-	//m_LightIndexSSBO->Bind();
-	//GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_LightIndices), m_LightIndices));
-	//
-	//int indices[g_MaxNumLightsPerTile];
-	//memcpy(indices, m_LightIndices, sizeof(indices));
 
 #else
 

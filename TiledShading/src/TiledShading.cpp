@@ -168,9 +168,9 @@ int main()
 			// Render
 			std::shared_ptr<RenderTechnique> currentRenderTechnique = renderModes[currentRenderMode].first;
 			currentRenderTechnique->Render(planeMesh);
-			/*for (int x = 0; x < g_CubeGridSize; x++)
+			for (int x = 0; x < g_CubeGridSize; x++)
 				for (int y = 0; y < g_CubeGridSize; y++)
-					currentRenderTechnique->Render(cubeGrid[x][y]);*/
+					currentRenderTechnique->Render(cubeGrid[x][y]);
 			currentRenderTechnique->Render();
 			
 #ifdef USE_IMGUI
@@ -427,7 +427,11 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 
 	std::shared_ptr<GLShader> tiledDeferredPrepassShader = std::make_shared<GLShader>();
 	tiledDeferredPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/tiled/tiled_deferred_prepass_vs.glsl");
-	tiledDeferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled/tiled_deferred_prepass_fs.glsl");
+#ifdef USE_COMPUTE_SHADER
+	tiledDeferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled/tiled_deferred_prepass_gpu_fs.glsl");
+#else
+	tiledDeferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled/tiled_deferred_prepass_cpu_fs.glsl");
+#endif
 	tiledDeferredPrepassShader->CompileShaders();
 
 	std::shared_ptr<GLShader> tiledDeferredLightingPassShader = std::make_shared<GLShader>();
@@ -461,6 +465,7 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 	std::shared_ptr<TiledDeferredComputeLightTilesPass> tiledDeferredComputeLightTilesPass = std::make_shared<TiledDeferredComputeLightTilesPass>(
 		renderer,
 		tiledDeferredComputeLightTilesShader,
+		viewSpacePositionTexture,
 		tileMinDepthImageTexture,
 		tileMaxDepthImageTexture,
 		lightIndexSSBO
@@ -501,7 +506,9 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 	tiledDeferredRendering->AddRenderPass(startTotalRenderTimePass);
 	// Prepass
 	tiledDeferredRendering->AddRenderPass(startPrepassRenderTimePass);
+#ifndef USE_COMPUTE_SHADER
 	tiledDeferredRendering->AddRenderPass(tiledDeferredClearTileMinMaxDepthPass);
+#endif
 	tiledDeferredRendering->AddRenderPass(tiledDeferredPrepass);
 	tiledDeferredRendering->AddRenderPass(stopPrepassRenderTimePass);
 	// Compute light tiles
