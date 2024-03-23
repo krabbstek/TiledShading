@@ -30,6 +30,15 @@ workspace "TiledShading"
             "%{prj.name}/vendor/imgui/**.cpp",
         }
 
+        files {
+            "%{prj.name}/vendor/imgui/*.h",
+            "%{prj.name}/vendor/imgui/*.cpp",
+            "%{prj.name}/vendor/imgui/examples/imgui_impl_glfw.h",
+            "%{prj.name}/vendor/imgui/examples/imgui_impl_glfw.cpp",
+            "%{prj.name}/vendor/imgui/examples/imgui_impl_opengl3.h",
+            "%{prj.name}/vendor/imgui/examples/imgui_impl_opengl3.cpp",
+        }
+
         includedirs {
             "%{prj.name}/src",
             "%{prj.name}/vendor/glad/include",
@@ -50,7 +59,7 @@ workspace "TiledShading"
         }
 
         defines {
-            
+            "IMGUI_IMPL_OPENGL_LOADER_GLAD",
         }
 
         filter "system:windows"

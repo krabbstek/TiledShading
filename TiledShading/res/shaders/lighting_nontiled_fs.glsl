@@ -89,8 +89,11 @@ void main()
 
 		float brdf = brdf(F, D, G, n_wo, n_wi);
 
-		out_Color += brdf * n_wi * Li * u_Material.albedo.rgb;
-	}
+		vec3 diffuse_term = u_Material.albedo.rgb * (1.0 / PI) * n_wi * Li;
+		vec3 dielectricTerm = brdf * n_wi * Li + (1.0 - F) * diffuse_term;
+		vec3 metalTerm = brdf * u_Material.albedo.rgb * n_wi * Li;
+		vec3 microfacetTerm = u_Material.metalness * metalTerm + (1.0 - u_Material.metalness) * dielectricTerm;
 
-	//out_Color *= u_Material.albedo.rgb;
+		out_Color += u_Material.reflectivity * microfacetTerm + (1.0 - u_Material.reflectivity) * diffuse_term;
+	}
 }
