@@ -11,6 +11,7 @@ public:
 	void SetData(const void* data, unsigned int size);
 
 	void Bind() const;
+	void Bind(unsigned int binding) const;
 	void Unbind() const;
 
 	inline GLuint RendererID() const { return m_RendererID; }

@@ -1,7 +1,7 @@
 #include "RenderPass.h"
 
-void RenderPass::Render(std::vector<RenderableArgs>& renderables)
+void RenderPass::Render(std::vector<Renderable*>& renderables)
 {
-	for (RenderableArgs renderableArgs : renderables)
-		renderableArgs.renderable->Render(*renderableArgs.renderer, *renderableArgs.shader);
+	for (Renderable* renderable : renderables)
+		renderable->Render(m_Renderer, *m_Shader);
 }

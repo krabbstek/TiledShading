@@ -15,13 +15,15 @@ void RenderTechnique::AddRenderPass(std::shared_ptr<RenderPass> renderPass)
 }
 
 
-void RenderTechnique::Render(const Renderable& renderable, const Renderer& renderer, GLShader& shader)
+void RenderTechnique::Render(Renderable& renderable)
 {
-	m_Renderables.emplace_back(&renderable, &renderer, &shader);
+	m_Renderables.emplace_back(&renderable);
 }
 
 void RenderTechnique::Render()
 {
 	for (std::shared_ptr<RenderPass> renderPass : m_RenderPasses)
 		renderPass->Render(m_Renderables);
+
+	m_Renderables.clear();
 }
