@@ -8,6 +8,9 @@
 #include "meshes/Cube.h"
 #include "meshes/PlaneMesh.h"
 #include "graphics/RenderTechnique.h"
+#include "graphics/renderpasses/StartGLTimerPass.h"
+#include "graphics/renderpasses/StopGLTimerPass.h"
+#include "graphics/renderpasses/PlotTimersPass.h"
 #include "graphics/renderpasses/forward/ForwardPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredLightingPass.h"
@@ -381,6 +384,7 @@ int main()
 			lightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
 
 			// Render
+			g_PlotOffset = (g_PlotOffset + 1) % g_NumGraphSamples;
 			//g_CurrentRenderTechnique->Render();
 
 			/*for (int x = 0; x < CUBE_GRID_SIZE; x++)
@@ -389,8 +393,8 @@ int main()
 			//g_ForwardRendering->Render(planeMesh);
 			//g_ForwardRendering->Render();
 
-			//g_DeferredRendering->Render(planeMesh);
-			//g_DeferredRendering->Render();
+			g_DeferredRendering->Render(planeMesh);
+			g_DeferredRendering->Render();
 
 #if 0
 			for (int x = 0; x < g_CubeGridSize; x++)
@@ -399,10 +403,7 @@ int main()
 			g_TiledDeferredRendering->Render(planeMesh);
 			g_TiledDeferredRendering->Render();
 
-#else
-
-			GLTimer timer;
-			timer.Start();
+#elif 0
 
 			switch (renderMode)
 			{
@@ -433,8 +434,7 @@ int main()
 				break;
 			}
 
-			timer.Stop();
-			std::printf("%d\n", timer.GetTime());
+			
 #endif
 			
 #ifdef USE_IMGUI
@@ -480,7 +480,7 @@ int Init()
 	}
 
 	glfwMakeContextCurrent(window);
-	glfwSwapInterval(1);
+	glfwSwapInterval(0);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -832,9 +832,20 @@ void InitDeferredRendering()
 		material
 	);
 
+	std::shared_ptr<GLTimer> totalRenderTimer = std::make_shared<GLTimer>();
+
+	std::shared_ptr<StartGLTimerPass> startGLTimerPass = std::make_shared<StartGLTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopGLTimerPass> stopGLTimerPass = std::make_shared<StopGLTimerPass>(renderer, totalRenderTimer);
+
+	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
+	plotTimersPass->AddTimer("Total render time", totalRenderTimer);
+
 	g_DeferredRendering = std::make_shared<RenderTechnique>();
+	g_DeferredRendering->AddRenderPass(plotTimersPass);
+	g_DeferredRendering->AddRenderPass(startGLTimerPass);
 	g_DeferredRendering->AddRenderPass(deferredPrepass);
 	g_DeferredRendering->AddRenderPass(deferredLightingPass);
+	g_DeferredRendering->AddRenderPass(stopGLTimerPass);
 }
 
 void InitTiledDeferredRendering()
