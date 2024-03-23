@@ -54,7 +54,8 @@ bool GLShader::CompileShaders()
 
 	for (auto a : m_Shaders)
 	{
-		GLCall(GLuint shader = glCreateShader(a.first));
+		GLuint shader;
+		GLCall(shader = glCreateShader(a.first));
 		GLCall(glShaderSource(shader, 1, &a.second, 0));
 		GLCall(glCompileShader(shader));
 			
@@ -199,7 +200,8 @@ unsigned int GLShader::GetUniformLocation(const std::string& uniformName)
 	// Uniform location not found in map
 	if (entry == m_UniformLocations.end())
 	{
-		GLCall(unsigned int location = glGetUniformLocation(m_RendererID, uniformName.c_str()));
+		unsigned int location;
+		GLCall(location = glGetUniformLocation(m_RendererID, uniformName.c_str()));
 		m_UniformLocations[uniformName] = location;
 		return location;
 	}

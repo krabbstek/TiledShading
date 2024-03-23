@@ -7,11 +7,14 @@ layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 uniform int u_MaxNumLightsPerTile = 256;
 uniform float u_FarPlaneDepth;
 
-shared int tileLightCount;
-shared int minIDepth;
-shared int maxIDepth;
-shared float minDepth;
-shared float maxDepth;
+shared int s_LightIndicesOffset;
+shared int s_TileLightCount;
+shared int s_TileLightIndices[1024];
+
+shared int s_MinIDepth;
+shared int s_MaxIDepth;
+shared float s_MinDepth;
+shared float s_MaxDepth;
 
 layout (binding = 0) uniform sampler2D u_ViewSpacePositionTexture;
 
@@ -19,6 +22,12 @@ struct Light
 {
 	vec4 viewSpacePosition;
 	vec4 color;
+};
+
+struct TileLights
+{
+	int offset;
+	int lightCount;
 };
 
 struct Plane
@@ -36,9 +45,16 @@ layout (std430, binding = 3) readonly buffer LightBuffer
 };
 
 /// Integer array containing pure indices to above lights
-layout (std430, binding = 4) writeonly buffer LightIndexBuffer
+layout (std430, binding = 4) buffer LightIndexBuffer
 {
+	int totalNumberOfIndices;
 	int lightIndices[];
+};
+
+/// Integer array of tile indices in lightIndices
+layout (std430, binding = 5) writeonly buffer TileIndexBuffer
+{
+	TileLights tileLights[];
 };
 
 layout (std430, binding = 10) buffer LeftPlaneBuffer
@@ -74,12 +90,15 @@ float PlaneDistance(Plane plane, vec4 point)
 
 void main()
 {
+	// Init group and local invocation variables
 	int tileCol = int(gl_WorkGroupID.x);
 	int tileRow = int(gl_WorkGroupID.y);
 	int threadsPerTile = int(gl_WorkGroupSize.x * gl_WorkGroupSize.y);
 	int tileIndex = TileIndex(tileCol, tileRow);
 	int lightIndicesOffset = tileIndex * u_MaxNumLightsPerTile;
+	ivec2 texCoords = ivec2(gl_WorkGroupID.xy * gl_WorkGroupSize.xy + gl_LocalInvocationID.xy);
 
+	// Get planes from list of planes for current tile
 	Plane leftPlane = leftPlanes[tileCol];
 	Plane rightPlane = rightPlanes[tileCol];
 	Plane bottomPlane = bottomPlanes[tileRow];
@@ -87,28 +106,30 @@ void main()
 	float planeDistance;
 	float threshold;
 
+	// Only initialize shared variables from one thread
 	if (gl_LocalInvocationIndex == 0)
 	{
-		tileLightCount = 0;
-		minIDepth = 0x7FFFFFFF;
-		maxIDepth = -0x7FFFFFFF;
+		s_TileLightCount = 0;
+		s_MinIDepth = 0x7FFFFFFF;
+		s_MaxIDepth = -0x7FFFFFFF;
 	}
 
 	barrier();
 
-	ivec2 texCoords = ivec2(gl_WorkGroupID.xy * gl_WorkGroupSize.xy + gl_LocalInvocationID.xy);
+	// Compute min and max depth in tile
 	float depth = texelFetch(u_ViewSpacePositionTexture, texCoords, 0).z;
 	int iDepth = int(depth * float(0x7FFFFFFF) / u_FarPlaneDepth);
 
-	atomicMin(minIDepth, iDepth);
-	atomicMax(maxIDepth, iDepth);
+	atomicMin(s_MinIDepth, iDepth);
+	atomicMax(s_MaxIDepth, iDepth);
 
 	barrier();
 
+	// Only set float min and max depth from one thread
 	if (gl_LocalInvocationIndex == 0)
 	{
-		minDepth = float(minIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
-		maxDepth = float(maxIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
+		s_MinDepth = float(s_MinIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
+		s_MaxDepth = float(s_MaxIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
 	}
 
 	barrier();
@@ -135,23 +156,43 @@ void main()
 		if (planeDistance <= threshold)
 			continue;
 
-		planeDistance = light.viewSpacePosition.z - maxDepth;
+		planeDistance = light.viewSpacePosition.z - s_MaxDepth;
 		if (planeDistance >= -threshold)
 			continue;
 
-		planeDistance = light.viewSpacePosition.z - minDepth;
+		planeDistance = light.viewSpacePosition.z - s_MinDepth;
 		if (planeDistance <= threshold)
 			continue;
 			
-		id = min(atomicAdd(tileLightCount, 1), u_MaxNumLightsPerTile - 1);
-		lightIndices[lightIndicesOffset + id] = i;
+		// If light passed all planes and depth tests: add to list of lights
+		id = min(atomicAdd(s_TileLightCount, 1), u_MaxNumLightsPerTile - 1);
+		//lightIndices[lightIndicesOffset + id] = i;
+		s_TileLightIndices[id] = i;
 	}
 
 	barrier();
 
+	// Atomically allocate enough space in lightIndices to put tile's light indices into
+	numLights = min(s_TileLightCount, u_MaxNumLightsPerTile);
+	if (gl_LocalInvocationIndex == 0)
+	{
+		s_LightIndicesOffset = atomicAdd(totalNumberOfIndices, numLights);
+	}
+
+	barrier();
+
+	// Copy light indices from tileLightIndices to lightIndices
+	for (int i = int(gl_LocalInvocationIndex); i < numLights; i += threadsPerTile)
+		lightIndices[s_LightIndicesOffset + i] = s_TileLightIndices[i];
+
 	if (gl_LocalInvocationIndex == 0)
 	{	
-		if (tileLightCount < u_MaxNumLightsPerTile - 1)
-			lightIndices[lightIndicesOffset + tileLightCount] = -1;
+		/*if (tileLightCount < u_MaxNumLightsPerTile - 1)
+			lightIndices[lightIndicesOffset + tileLightCount] = -1;*/
+
+		TileLights currentTile;
+		currentTile.offset = s_LightIndicesOffset;
+		currentTile.lightCount = numLights;
+		tileLights[tileIndex] = currentTile;
 	}
 }
