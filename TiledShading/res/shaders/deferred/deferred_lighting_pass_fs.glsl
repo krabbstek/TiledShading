@@ -90,6 +90,4 @@ void main()
 
 		out_Color += u_Material.reflectivity * microfacetTerm + (1.0 - u_Material.reflectivity) * diffuse_term;
 	}
-
-	out_Color = n;
 }

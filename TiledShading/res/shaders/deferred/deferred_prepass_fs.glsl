@@ -3,8 +3,8 @@
 in vec3 viewSpacePosition;
 in vec3 viewSpaceNormal;
 
-out vec3 out_ViewSpaceNormal;
 out vec3 out_ViewSpacePosition;
+out vec3 out_ViewSpaceNormal;
 
 void main()
 {
