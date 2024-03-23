@@ -16,6 +16,7 @@ workspace "TiledShading"
         objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
 
         files {
+            "%{prj.name}/res/shaders/**.glsl",
             "%{prj.name}/src/**.h",
             "%{prj.name}/src/**.cpp",
             "%{prj.name}/vendor/**.h",

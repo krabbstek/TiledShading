@@ -10,6 +10,8 @@ public:
 	GLFramebuffer(unsigned int width, unsigned int height);
 	~GLFramebuffer();
 
+	static GLFramebuffer* GetDefaultFramebuffer();
+
 	/* type = GL_RGB or similar. attachment = GL_COLOR_ATTACHMENT(0,1,2) or GL_DEPTH_STENCIL_ATTACHMENT. */
 	GLTexture2D* AttachTexture(GLuint internalFormat, GLuint storageType, unsigned int attachment = 0) const;
 	/* type = GL_RGB or similar. attachment = GL_COLOR_ATTACHMENT(0,1,2) or GL_DEPTH_STENCIL_ATTACHMENT. */
@@ -37,4 +39,6 @@ private:
 	unsigned int m_NumAttachedTextures;
 	GLuint m_FramebufferRendererID;
 	GLuint m_DepthStencilRenderbufferID;
+
+	GLFramebuffer();
 };

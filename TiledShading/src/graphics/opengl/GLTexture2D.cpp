@@ -23,7 +23,7 @@ void GLTexture2D::Load(GLuint openGLFormat, const unsigned char* data, unsigned 
 {
 	Bind(MAX_TEXTURES - 1);
 	GLCall(glTexImage2D(GL_TEXTURE_2D, 0, openGLFormat, width, height, 0, dataFormat, type, data));
-	GLCall(glGenerateTextureMipmap(m_RendererID));
+	//GLCall(glGenerateTextureMipmap(m_RendererID));
 	m_Width = width;
 	m_Height = height;
 }
@@ -80,8 +80,9 @@ void GLTexture2D::SetWrapT(GLuint parameter) const
 
 void GLTexture2D::SetWrapST(GLuint parameter) const
 {
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_S, parameter));
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_T, parameter));
+	Bind();
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, parameter));
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, parameter));
 }
 
 void GLTexture2D::SetMinFilter(GLuint parameter) const
@@ -96,8 +97,9 @@ void GLTexture2D::SetMagFilter(GLuint parameter) const
 
 void GLTexture2D::SetMinMagFilter(GLuint parameter) const
 {
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_MIN_FILTER, parameter));
-	GLCall(glTextureParameteri(m_RendererID, GL_TEXTURE_MAG_FILTER, parameter));
+	Bind();
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, parameter));
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, parameter));
 }
 
 
