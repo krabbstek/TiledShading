@@ -4,6 +4,8 @@
 
 TiledDeferredLightingPass::TiledDeferredLightingPass(Renderer& renderer, std::shared_ptr<GLShader> shader, std::shared_ptr<GLTexture2D> viewSpacePositionTexture, std::shared_ptr<GLTexture2D> viewSpaceNormalTexture, std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO, std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO, const Material& material)
 	: RenderPass(renderer, shader),
+	m_ViewSpacePositionTexture(viewSpacePositionTexture),
+	m_ViewSpaceNormalTexture(viewSpaceNormalTexture),
 	m_LightSSBO(std::make_shared<GLShaderStorageBuffer>(&g_Lights, sizeof(g_Lights))),
 	m_LightIndexSSBO(lightIndexSSBO),
 	m_TileIndexSSBO(tileIndexSSBO),
@@ -25,6 +27,9 @@ void TiledDeferredLightingPass::Render(std::vector<Renderable*>&)
 	GLCall(glBindFramebuffer(GL_FRAMEBUFFER, 0));
 	GLCall(glViewport(0, 0, g_WindowWidth, g_WindowHeight));
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+	m_ViewSpacePositionTexture->Bind(0);
+	m_ViewSpacePositionTexture->Bind(1);
 
 	m_Shader->Bind();
 	m_LightSSBO->SetData(&g_Lights, sizeof(g_Lights));

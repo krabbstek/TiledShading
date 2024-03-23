@@ -56,6 +56,11 @@ void main()
 
 	vec3 viewSpacePosition = texelFetch(u_ViewSpacePosition, texCoords, 0).rgb;
 	vec3 n = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
+	if (dot(n, n) == 0)
+	{
+		out_Color = vec3(0.0);
+		return;
+	}
 
 	uint numLights = lights.length();
 
