@@ -4,19 +4,15 @@
 
 layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 
-uniform int u_MaxNumLightsPerTile = 128;
+uniform int u_MaxNumLightsPerTile = 256;
 uniform float u_LightFalloffThreshold;
+
+shared int tileLightCount;
 
 struct Light
 {
 	vec4 viewSpacePosition;
 	vec4 color;
-};
-
-struct TileLightIndex
-{
-	int offset;
-	int count;
 };
 
 struct Plane
@@ -28,21 +24,15 @@ struct Plane
 };
 
 /// Lights, containing view space position and color
-layout (std430, binding = 3) buffer LightBuffer
+layout (std430, binding = 3) readonly buffer LightBuffer
 {
 	Light lights[];
 };
 
 /// Integer array containing pure indices to above lights
-layout (std430, binding = 4) buffer LightIndexBuffer
+layout (std430, binding = 4) writeonly buffer LightIndexBuffer
 {
 	int lightIndices[];
-};
-
-/// Contains the number of lights for each tile
-layout (std430, binding = 5) buffer SizeBuffer
-{
-	int numLightsPerTile[];
 };
 
 layout (std430, binding = 10) buffer LeftPlaneBuffer
@@ -66,9 +56,9 @@ layout (std430, binding = 13) buffer TopPlaneBuffer
 };
 
 
-uint TileIndex(uint tileCol, uint tileRow)
+int TileIndex(int tileCol, int tileRow)
 {
-	return tileCol + tileRow * gl_NumWorkGroups.x;
+	return tileCol + tileRow * int(gl_NumWorkGroups.x);
 }
 
 float PlaneDistance(Plane plane, vec4 point)
@@ -78,11 +68,11 @@ float PlaneDistance(Plane plane, vec4 point)
 
 void main()
 {
-	uint tileCol = gl_WorkGroupID.x;
-	uint tileRow = gl_WorkGroupID.y;
-	uint threadsPerTile = gl_WorkGroupSize.x * gl_WorkGroupSize.y;
-	uint tileIndex = TileIndex(gl_WorkGroupID.x, gl_WorkGroupID.y);
-	int lightIndicesOffset = int(tileIndex) * u_MaxNumLightsPerTile;
+	int tileCol = int(gl_WorkGroupID.x);
+	int tileRow = int(gl_WorkGroupID.y);
+	int threadsPerTile = int(gl_WorkGroupSize.x * gl_WorkGroupSize.y);
+	int tileIndex = TileIndex(tileCol, tileRow);
+	int lightIndicesOffset = tileIndex * u_MaxNumLightsPerTile;
 
 	Plane leftPlane = leftPlanes[tileCol];
 	Plane rightPlane = rightPlanes[tileCol];
@@ -91,13 +81,15 @@ void main()
 	float planeDistance;
 	float threshold = -u_LightFalloffThreshold;
 
-	numLightsPerTile[tileIndex] = 0;
+	if (gl_LocalInvocationIndex == 0)
+		tileLightCount = 0;
+
 	barrier();
 
 	int id;
-	uint numLights = lights.length();
+	int numLights = lights.length();
 	Light light;
-	for (uint i = gl_LocalInvocationIndex; i < numLights; i += threadsPerTile)
+	for (int i = int(gl_LocalInvocationIndex); i < numLights; i += threadsPerTile)
 	{
 		light = lights[i];
 		
@@ -114,7 +106,19 @@ void main()
 		if (planeDistance <= threshold)
 			continue;
 			
-		id = min(atomicAdd(numLightsPerTile[tileIndex], 1), u_MaxNumLightsPerTile - 1);
-		lightIndices[lightIndicesOffset + id] = int(i);
+		id = min(atomicAdd(tileLightCount, 1), u_MaxNumLightsPerTile - 1);
+		lightIndices[lightIndicesOffset + id] = i;
 	}
+
+	barrier();
+
+	//lightIndices[lightIndicesOffset + gl_LocalInvocationIndex] = int(gl_LocalInvocationIndex);
+	//
+	if (gl_LocalInvocationIndex == 0)
+	{	
+		if (tileLightCount < u_MaxNumLightsPerTile - 1)
+			lightIndices[lightIndicesOffset + tileLightCount] = -1;
+	}
+
+	//lightIndices[lightIndicesOffset + u_MaxNumLightsPerTile] = -1;
 }

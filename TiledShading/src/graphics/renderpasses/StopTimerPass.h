@@ -7,6 +7,7 @@
 class StopTimerPass : public RenderPass
 {
 public:
+	StopTimerPass(Renderer& renderer, std::shared_ptr<Timer> timer);
 	StopTimerPass(Renderer& renderer, std::shared_ptr<CPUTimer> timer);
 	StopTimerPass(Renderer& renderer, std::shared_ptr<GLTimer> timer);
 	~StopTimerPass() {}

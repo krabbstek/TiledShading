@@ -56,8 +56,8 @@ Material material;
 int Init();
 void InitNoRendering();
 void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer);
-void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
-void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
+void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
+void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void ImGuiRender();
 
 int main()
@@ -109,9 +109,14 @@ int main()
 			// Timers
 			std::shared_ptr<GLTimer> forwardTotalRenderTimer = std::make_shared<GLTimer>();
 			std::shared_ptr<GLTimer> deferredPrepassTimer = std::make_shared<GLTimer>();
-			std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer = std::make_shared<CPUTimer>();
 			std::shared_ptr<GLTimer> deferredLightingPassTimer = std::make_shared<GLTimer>();
 			std::shared_ptr<GLTimer> deferredTotalRenderTimer = std::make_shared<GLTimer>();
+
+#ifdef USE_COMPUTE_SHADER
+			std::shared_ptr<GLTimer> deferredTileLightingComputationTimer = std::make_shared<GLTimer>();
+#else
+			std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer = std::make_shared<CPUTimer>();
+#endif
 
 			// No rendering
 			InitNoRendering();
@@ -163,9 +168,9 @@ int main()
 			// Render
 			std::shared_ptr<RenderTechnique> currentRenderTechnique = renderModes[currentRenderMode].first;
 			currentRenderTechnique->Render(planeMesh);
-			for (int x = 0; x < g_CubeGridSize; x++)
+			/*for (int x = 0; x < g_CubeGridSize; x++)
 				for (int y = 0; y < g_CubeGridSize; y++)
-					currentRenderTechnique->Render(cubeGrid[x][y]);
+					currentRenderTechnique->Render(cubeGrid[x][y]);*/
 			currentRenderTechnique->Render();
 			
 #ifdef USE_IMGUI
@@ -309,7 +314,7 @@ void InitForwardRendering(std::shared_ptr<GLTimer> totalRenderTimer)
 	renderModes[FORWARD].second = "Forward rendering";
 }
 
-void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
+void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
 {
 	// Textures
 	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
@@ -390,7 +395,7 @@ void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_pt
 	renderModes[DEFERRED].second = "Deferred rendering";
 }
 
-void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<CPUTimer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
+void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
 {
 	// Textures
 	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();

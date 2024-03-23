@@ -4,13 +4,21 @@
 
 constexpr unsigned int g_WindowWidth = 1280;
 constexpr unsigned int g_WindowHeight = 720;
+
+// Use separate tile sizes for GPU and CPU light calculations
+#ifdef USE_COMPUTE_SHADER
+constexpr unsigned int g_TileSize = 20;
+#else
 constexpr unsigned int g_TileSize = 80;
+#endif
+
 constexpr int g_NumTileCols = g_WindowWidth / g_TileSize;
 constexpr int g_NumTileRows = g_WindowHeight / g_TileSize;
-constexpr int g_MaxNumLightsPerTile = 4096;
+constexpr int g_MaxNumLightsPerTile = 1024;
+
 
 constexpr int g_CubeGridSize = 9;
-constexpr int g_LightGridSize = 50;
+constexpr int g_LightGridSize = 30;
 
 constexpr float g_FOV = DegToRad(75.0f);
 constexpr float g_AspectRatio = float(g_WindowWidth) / float(g_WindowHeight);

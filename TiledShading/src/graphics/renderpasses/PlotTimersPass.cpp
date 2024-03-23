@@ -9,6 +9,12 @@ PlotTimersPass::PlotTimersPass(Renderer& renderer)
 }
 
 
+void PlotTimersPass::AddTimer(const char* label, std::shared_ptr<Timer>& timer)
+{
+	m_Timers.emplace_back(timer);
+	m_Labels.emplace_back(label);
+}
+
 void PlotTimersPass::AddTimer(const char* label, std::shared_ptr<CPUTimer>& timer)
 {
 	m_Timers.emplace_back(timer);

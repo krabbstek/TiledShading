@@ -11,6 +11,7 @@ public:
 	PlotTimersPass(Renderer& renderer);
 	~PlotTimersPass() {}
 
+	void AddTimer(const char* label, std::shared_ptr<Timer>& timer);
 	void AddTimer(const char* label, std::shared_ptr<CPUTimer>& timer);
 	void AddTimer(const char* label, std::shared_ptr<GLTimer>& timer);
 
