@@ -51,11 +51,4 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
 	m_Shader->DispatchComputeShader(g_NumTileCols, g_NumTileRows, 1);
-	return;
-	GLCall(glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT));
-
-	int data[g_NumTileRows * g_NumTileCols * 2];
-	m_TileIndexSSBO->Bind();
-	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, g_NumTileRows * g_NumTileCols * 2 * sizeof(int), data));
-	data[0] = 0;
 }
