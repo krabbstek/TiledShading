@@ -25,6 +25,7 @@ TiledForwardComputeLightTilesPass::TiledForwardComputeLightTilesPass(
 	m_Shader->SetUniform1f("u_NearPlaneDepth", g_NearPlaneDepth);
 	m_Shader->SetUniform1f("u_FarPlaneDepth", g_FarPlaneDepth);
 	m_Shader->SetUniform2f("u_ViewportSize", vec2(float(g_WindowWidth), float(g_WindowHeight)));
+	m_Shader->SetUniform1i("u_TileSize", g_TileSize);
 }
 
 TiledForwardComputeLightTilesPass::~TiledForwardComputeLightTilesPass()

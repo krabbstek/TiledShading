@@ -69,6 +69,15 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 void InitClusteredDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> tileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void ImGuiRender();
 
+void PrintBinary(unsigned int x)
+{
+	std::printf("0b");
+	for (int i = 0; i < 32; i++)
+	{
+		std::printf("%d", (x >> i) & 1);
+	}
+}
+
 int main()
 {
 	static_assert(!((g_WindowWidth % g_TileSize) | (g_WindowHeight % g_TileSize)));
@@ -115,6 +124,16 @@ int main()
 		GLCall(glEnable(GL_DEPTH_TEST));
 		GLCall(glCullFace(GL_BACK));
 		GLCall(glDepthFunc(GL_LEQUAL));
+
+		unsigned int depthMask = ~0;
+		float depth = 0.5f;
+		float radius = 0.2f;
+		unsigned int index1 = unsigned int(32.0f * (depth - radius));
+		unsigned int index2 = 31 - unsigned int(32.0f * (depth + radius));
+		depthMask = (depthMask << index1) >> index1;
+		depthMask = (depthMask >> index2) << index2;
+		PrintBinary(depthMask);
+		std::printf("\n");
 
 		/// Render techniques
 		{

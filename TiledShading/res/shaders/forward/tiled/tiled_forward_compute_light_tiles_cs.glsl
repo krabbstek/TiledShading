@@ -1,6 +1,6 @@
 #version 430 core
 
-#define TILE_SIZE 10
+#define TILE_SIZE 20
 
 layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 

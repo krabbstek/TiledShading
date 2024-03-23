@@ -24,6 +24,7 @@ TiledDeferredComputeLightTilesPass::TiledDeferredComputeLightTilesPass(
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
 	m_Shader->SetUniform1f("u_NearPlaneDepth", g_NearPlaneDepth);
 	m_Shader->SetUniform1f("u_FarPlaneDepth", g_FarPlaneDepth);
+	m_Shader->SetUniform1i("u_TileSize", g_TileSize);
 }
 
 TiledDeferredComputeLightTilesPass::~TiledDeferredComputeLightTilesPass()
