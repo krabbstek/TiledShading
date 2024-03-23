@@ -88,13 +88,9 @@ void main()
 	vec3 viewSpacePosition = texelFetch(u_ViewSpacePosition, texCoords, 0).rgb;
 	vec3 n = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
 
-	vec3 color;
-
-	ivec2 tileCoords = ivec2(gl_FragCoord.xy) / u_TileSize;
+	ivec2 tileCoords = texCoords / u_TileSize;
 	int index = TileIndex(tileCoords.x, tileCoords.y);
 	LightIndex lightIndex = tileIndices[index];
-
-	//out_Color = vec3(float(lightIndex.count) / 10.0);
 
 	for (int i = 0; i < lightIndex.count; i++)
 	{

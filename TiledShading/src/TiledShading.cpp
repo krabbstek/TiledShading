@@ -20,7 +20,7 @@
 
 constexpr unsigned int WINDOW_WIDTH = 1280;
 constexpr unsigned int WINDOW_HEIGHT = 720;
-constexpr unsigned int TILE_SIZE = 80;
+constexpr unsigned int TILE_SIZE = 40;
 constexpr int tileCols = WINDOW_WIDTH / TILE_SIZE;
 constexpr int tileRows = WINDOW_HEIGHT / TILE_SIZE;
 
@@ -44,6 +44,8 @@ float currentTime;
 
 std::vector<Plane> leftPlanes, rightPlanes, bottomPlanes, topPlanes;
 std::vector<std::pair<unsigned int, unsigned int>> tileLights[tileRows][tileCols];
+std::vector<int> lightIndices;
+int tileLightIndices[2 * WINDOW_WIDTH * WINDOW_HEIGHT / (TILE_SIZE * TILE_SIZE)];
 
 RENDER_MODE renderMode = TILED_DEFERRED;
 
@@ -75,8 +77,8 @@ unsigned int planeIndices[] =
 	0, 2, 3,
 };
 
-vec3 lightGridOffset(0.0f, 1.0f, 0.0f);
-vec2 lightGridScale(0.7f); //(3.5f);
+vec3 lightGridOffset = vec3(0.0f, 0.6f, 0.0f);
+vec2 lightGridScale = vec2(0.7f); //(3.5f);
 float lightIntensity = 0.1f; // 3.0f;
 float lightRadiusMultiplier = 1.0f;
 bool dynamicLights = true;
@@ -180,10 +182,6 @@ int main()
 		topPlanes.push_back(Plane(-normal, 0));
 	}
 	topPlanes.push_back(Plane(vec3(0.0f, -cos(halfFovPerTile * tileCols), -sin(halfFovPerTile * tileCols)), 0));
-
-	for (int x = 0; x < LIGHT_GRID_SIZE; x++)
-		for (int y = 0; y < LIGHT_GRID_SIZE; y++)
-			tileLights[x][y].reserve(LIGHT_GRID_SIZE * LIGHT_GRID_SIZE);
 
 	{
 		renderer.camera.projectionMatrix = mat4::Perspective(fov, float(WINDOW_WIDTH) / float(WINDOW_HEIGHT), 0.1f, 100.0f);
@@ -501,7 +499,7 @@ void ImGuiRender()
 
 	ImGui::Text("Light");
 	ImGui::Checkbox("Dynamic lights", &dynamicLights);
-	ImGui::SliderFloat("Light intensity", &lightIntensity, 0.0f, 100.0f, "%.1f", 3.0f);
+	ImGui::SliderFloat("Light intensity", &lightIntensity, 0.0f, 100.0f, "%.2f", 3.0f);
 	ImGui::SliderFloat("Light radius multiplier", &lightRadiusMultiplier, 0.0f, 100.0f, "%.1f", 3.0f);
 	ImGui::SliderFloat3("Light grid offset", &lightGridOffset.x, -3.0f, 3.0f, "%.1f", 1.0f);
 	ImGui::SliderFloat2("Light grid scale", &lightGridScale.x, 0.0f, 10.0f, "%.1f", 1.0f);
@@ -711,29 +709,31 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 		{
 			for (int col = 0; col < tileCols; col++)
 			{
-				float dLeft = leftPlanes[col].Distance(lights[lightX][lightZ].viewSpacePosition);
+				const vec3& viewSpacePosition = lights[lightX][lightZ].viewSpacePosition;
+
+				float dLeft = leftPlanes[col].Distance(viewSpacePosition);
 				if (dLeft < -lightRadius)
 					continue;
-				float dRight = rightPlanes[col].Distance(lights[lightX][lightZ].viewSpacePosition);
+				float dRight = rightPlanes[col].Distance(viewSpacePosition);
 				if (dRight < -lightRadius)
 					continue;
 
 				for (int row = 0; row < tileRows; row++)
 				{
-					float dBottom = bottomPlanes[row].Distance(lights[lightX][lightZ].viewSpacePosition);
+					float dBottom = bottomPlanes[row].Distance(viewSpacePosition);
 					if (dBottom < -lightRadius)
 						continue;
-					float dTop = topPlanes[row].Distance(lights[lightX][lightZ].viewSpacePosition);
+					float dTop = topPlanes[row].Distance(viewSpacePosition);
 					if (dTop < -lightRadius)
 						continue;
 
-					/*float dNear = lights[lightX][lightZ].viewSpacePosition.z - tileMin[row * (WINDOW_WIDTH / TILE_SIZE) + col];
+					float dNear = viewSpacePosition.z - tileMax[row * (WINDOW_WIDTH / TILE_SIZE) + col];
 					if (dNear > lightRadius)
 						continue;
 
-					float dFar = lights[lightX][lightZ].viewSpacePosition.z - tileMax[row * (WINDOW_WIDTH / TILE_SIZE) + col];
-					if (dFar < -lightRadius)
-						continue;*/
+					float dFar = viewSpacePosition.z - tileMin[row * (WINDOW_WIDTH / TILE_SIZE) + col];
+					if (dFar > lightRadius)
+						continue;
 
 					tileLights[row][col].emplace_back(lightX, lightZ);
 				}
@@ -741,8 +741,7 @@ void RenderTiledDeferred(Cube(&cubeGrid)[CUBE_GRID_SIZE][CUBE_GRID_SIZE])
 		}
 	}
 
-	int tileLightIndices[2 * WINDOW_WIDTH * WINDOW_HEIGHT / (TILE_SIZE * TILE_SIZE)];
-	std::vector<int> lightIndices;
+	lightIndices.clear();
 
 	for (int row = 0; row < tileRows; row++)
 	{
