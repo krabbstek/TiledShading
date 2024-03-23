@@ -15,7 +15,7 @@ TiledDeferredComputeLightTilesPass::TiledDeferredComputeLightTilesPass(
 	m_ViewSpacePositionTexture(viewSpacePositionTexture),
 	m_TileMinDepthImageTexture(tileMinDepthImageTexture),
 	m_TileMaxDepthImageTexture(tileMaxDepthImageTexture),
-	m_LightSSBO(std::make_shared<GLShaderStorageBuffer>(g_LightGrid, sizeof(g_LightGrid))),
+	m_LightSSBO(std::make_shared<GLShaderStorageBuffer>(&g_Lights, sizeof(g_Lights))),
 	m_LightIndexSSBO(lightIndexSSBO)
 {
 	m_LeftPlanesSSBO = std::make_shared<GLShaderStorageBuffer>(m_TileGrid.leftPlanes, sizeof(m_TileGrid.leftPlanes));
@@ -40,7 +40,7 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 #ifdef USE_COMPUTE_SHADER
 	m_ViewSpacePositionTexture->Bind(0);
 	
-	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
+	m_LightSSBO->SetData(&g_Lights, sizeof(g_Lights));
 	m_LightSSBO->Bind(3);
 
 	m_LightIndexSSBO->Bind(4);
@@ -49,7 +49,6 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 	m_RightPlanesSSBO->Bind(11);
 	m_BottomPlanesSSBO->Bind(12);
 	m_TopPlanesSSBO->Bind(13);
-	m_Shader->SetUniform1f("u_LightFalloffThreshold", sqrt(g_LightIntensityMultiplier / g_LightFalloffThreshold));
 	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
 	m_Shader->DispatchComputeShader(g_NumTileCols, g_NumTileRows, 1);
 

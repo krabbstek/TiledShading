@@ -14,9 +14,9 @@ constexpr unsigned int g_TileSize = 80;
 
 constexpr int g_NumTileCols = g_WindowWidth / g_TileSize;
 constexpr int g_NumTileRows = g_WindowHeight / g_TileSize;
-constexpr int g_MaxNumLightsPerTile = 1024;
+constexpr int g_MaxNumLightsPerTile = 4096;
 
-constexpr int g_CubeGridSize = 9;
+constexpr int g_CubeGridSize = 6;
 constexpr int g_LightGridSize = 50;
 
 constexpr float g_FOV = DegToRad(75.0f);
@@ -25,5 +25,7 @@ constexpr float g_NearPlaneDepth = 0.1f;
 constexpr float g_FarPlaneDepth = 100.0f;
 
 constexpr int g_NumGraphSamples = 240;
-constexpr float g_GraphSizeX = 320.0f;
-constexpr float g_GraphSizeY = 80.0f;
+constexpr float g_LargeGraphSizeX = 320.0f;
+constexpr float g_LargeGraphSizeY = 80.0f;
+constexpr float g_SmallGraphSizeX = 320.0f;
+constexpr float g_SmallGraphSizeY = 40.0f;

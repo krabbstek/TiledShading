@@ -5,7 +5,7 @@
 
 ForwardPass::ForwardPass(Renderer& renderer, std::shared_ptr<GLShader> shader, const Material& material)
 	: RenderPass(renderer, shader),
-	m_LightSSBO(std::make_shared<GLShaderStorageBuffer>(g_LightGrid, sizeof(g_LightGrid))),
+	m_LightSSBO(std::make_shared<GLShaderStorageBuffer>(&g_Lights, sizeof(g_Lights))),
 	m_Material(material)
 {
 }
@@ -18,8 +18,7 @@ void ForwardPass::Render(std::vector<Renderable*>& renderables)
 	GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
 	m_Material.Bind(*m_Shader);
-	m_Shader->SetUniform1f("u_LightFalloffThreshold", g_LightFalloffThreshold / g_LightIntensityMultiplier);
-	m_LightSSBO->SetData(g_LightGrid, sizeof(g_LightGrid));
+	m_LightSSBO->SetData(&g_Lights, sizeof(g_Lights));
 	m_LightSSBO->Bind(3);
 
 	RenderPass::Render(renderables);

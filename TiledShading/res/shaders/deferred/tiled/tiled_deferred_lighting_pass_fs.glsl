@@ -16,8 +16,6 @@ uniform struct Material
 	float fresnel;
 } u_Material;
 
-uniform float u_LightFalloffThreshold;
-
 uniform int u_NumTileCols;
 uniform int u_TileSize;
 uniform int u_MaxNumLightsPerTile;
@@ -93,9 +91,10 @@ void main()
 			break;
 
 		Light light = lights[index];
+		float lightThreshold = light.color.a;
 
 		vec3 wi = light.viewSpacePosition.xyz - viewSpacePosition;
-		float inv_d2 = max(1.0 / dot(wi, wi) - u_LightFalloffThreshold, 0.0);
+		float inv_d2 = max(1.0 / dot(wi, wi) - lightThreshold, 0.0);
 		wi = normalize(wi);
 		float n_wi = dot(n, wi);
 		if (n_wi <= 0.0)
