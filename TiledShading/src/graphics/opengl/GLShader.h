@@ -24,6 +24,8 @@ public:
 	void Bind() const;
 	void Unbind() const;
 
+	void DispatchComputeShader(unsigned int numWorkGroupsX, unsigned int numWorkGroupsY, unsigned int numWorkGroupsZ);
+
 	inline void SetUniform1f(const char* uniformName, float value) { SetUniform1f(std::string(uniformName), value); }
 	void SetUniform1f(const std::string& uniformName, float value);
 	inline void SetUniform1i(const char* uniformName, int value) { SetUniform1i(std::string(uniformName), value); }

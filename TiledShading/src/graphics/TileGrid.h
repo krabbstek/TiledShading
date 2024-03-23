@@ -15,14 +15,15 @@ public:
 
 	void ComputeLightTiles(Light* lights, int numLights, float* tileMinDepth, float* tileMaxDepth, GLShaderStorageBuffer& lightIndexSSBO, GLShaderStorageBuffer& tileIndexSSBO);
 
-private:
+public:
 	// Memory layout
 	// [ 3, 4, 5 ]
 	// [ 0, 1, 2 ]
-	Plane m_LeftPlanes[g_NumTileCols];
-	Plane m_RightPlanes[g_NumTileCols];
-	Plane m_BottomPlanes[g_NumTileRows];
-	Plane m_TopPlanes[g_NumTileRows];
+	Plane leftPlanes[g_NumTileCols];
+	Plane rightPlanes[g_NumTileCols];
+	Plane bottomPlanes[g_NumTileRows];
+	Plane topPlanes[g_NumTileRows];
+private:
 	int m_TileIndexMemoryLayout[2 * g_NumTileRows * g_NumTileCols];
 	std::vector<int> m_LightTiles[g_NumTileRows][g_NumTileCols];
 	std::vector<int> m_LightIndices;
