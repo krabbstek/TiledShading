@@ -20,7 +20,7 @@ GLVertexArray::~GLVertexArray()
 void GLVertexArray::AddVertexBuffer(const GLVertexBuffer& vbo)
 {
 	const GLVertexBufferLayout& layout = vbo.GetVertexBufferLayout();
-	unsigned int offset = 0;
+	unsigned long long offset = 0;
 		
 	vbo.Bind();
 	Bind();

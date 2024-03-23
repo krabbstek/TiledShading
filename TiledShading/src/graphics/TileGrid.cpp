@@ -110,8 +110,8 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 	{
 		for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
 		{
-			m_TileIndexMemoryLayout[memoryLayoutIndex++] = m_LightIndices.size();
-			numLights = m_LightTiles[tileRow][tileCol].size();
+			m_TileIndexMemoryLayout[memoryLayoutIndex++] = int(m_LightIndices.size());
+			numLights = int(m_LightTiles[tileRow][tileCol].size());
 			m_TileIndexMemoryLayout[memoryLayoutIndex++] = numLights;
 
 			for (int i = 0; i < numLights; i++)
@@ -119,6 +119,6 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 		}
 	}
 
-	lightIndexSSBO.SetData(m_LightIndices.data(), m_LightIndices.size() * sizeof(int));
+	lightIndexSSBO.SetData(m_LightIndices.data(), unsigned int(m_LightIndices.size() * sizeof(int)));
 	tileIndexSSBO.SetData(m_TileIndexMemoryLayout, sizeof(m_TileIndexMemoryLayout));
 }
