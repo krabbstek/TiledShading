@@ -6,6 +6,8 @@ GLShaderStorageBuffer::GLShaderStorageBuffer(const void* data, unsigned int size
 	: m_RendererID(0), m_Size(size)
 {
 	GLCall(glGenBuffers(1, &m_RendererID));
+	if (data && size)
+		SetData(data, size);
 }
 
 GLShaderStorageBuffer::~GLShaderStorageBuffer()

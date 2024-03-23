@@ -4,7 +4,7 @@ out vec4 out_Color;
 
 layout (binding = 0) uniform sampler2D u_TileTexture;
 
-uniform int u_TileSize = 40;
+uniform int u_TileSize;
 
 void main()
 {

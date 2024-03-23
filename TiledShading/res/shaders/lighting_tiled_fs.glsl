@@ -17,6 +17,9 @@ uniform struct Material
 	float fresnel;
 } u_Material;
 
+uniform int u_NumTileCols;
+uniform int u_TileSize;
+
 struct Light
 {
 	vec4 viewSpacePosition;
@@ -25,13 +28,27 @@ struct Light
 
 struct LightIndex
 {
-	uint offset;
-	uint count;
+	int offset;
+	int count;
 };
 
+
+/// Lights, with position and color
 layout (std430, binding = 3) buffer LightBuffer
 {
 	Light lights[];
+};
+
+/// Pure array of indices to the above lights
+layout (std430, binding = 4) buffer LightIndices
+{
+	int lightIndices[];
+};
+
+/// Tells shader where to look in lightIndices
+layout (std430, binding = 5) buffer LightTiles
+{
+	LightIndex tileIndices[];
 };
 
 
@@ -57,31 +74,41 @@ float brdf(float F, float D, float G, float n_wo, float n_wi)
 }
 
 
+int TileIndex(int col, int row)
+{
+	return col + row * u_NumTileCols;
+}
+
+
 void main()
 {
 	ivec2 texCoords = ivec2(gl_FragCoord.xy);
 
 	vec3 albedo = texelFetch(u_Albedo, texCoords, 0).rgb;
 	vec3 viewSpacePosition = texelFetch(u_ViewSpacePosition, texCoords, 0).rgb;
-	vec3 viewSpaceNormal = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
-
-	if (dot(viewSpaceNormal, viewSpaceNormal) == 0)
-		discard;
-
-	vec3 n = normalize(viewSpaceNormal);
+	vec3 n = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
 
 	vec3 color;
-	uint numLights = lights.length();
-	for (int i = 0; i < numLights; i++)
+
+	ivec2 tileCoords = ivec2(gl_FragCoord.xy) / u_TileSize;
+	int index = TileIndex(tileCoords.x, tileCoords.y);
+	LightIndex lightIndex = tileIndices[index];
+
+	//out_Color = vec3(float(lightIndex.count) / 10.0);
+
+	for (int i = 0; i < lightIndex.count; i++)
 	{
-		vec3 wi = lights[i].viewSpacePosition.xyz - viewSpacePosition;
+		index = lightIndices[lightIndex.offset + i];
+		Light light = lights[index];
+
+		vec3 wi = light.viewSpacePosition.xyz - viewSpacePosition;
 		float inv_d2 = 1.0 / dot(wi, wi);
 		wi = normalize(wi);
 		float n_wi = dot(n, wi);
 		if (n_wi <= 0.0)
 			continue;
 
-		vec3 Li = lights[i].color.rgb * inv_d2;
+		vec3 Li = light.color.rgb * inv_d2;
 		vec3 wo = -normalize(viewSpacePosition);
 		vec3 wh = normalize(wi + wo);
 

@@ -53,21 +53,12 @@ float brdf(float F, float D, float G, float n_wo, float n_wi)
 
 void main()
 {
-	//vec3 albedo = texture(u_Albedo, texCoords).rgb;
-	//vec3 viewSpacePosition = texture(u_ViewSpacePosition, texCoords).xyz;
-	//vec3 viewSpaceNormal = texture(u_ViewSpaceNormal, texCoords).xyz;
 	ivec2 texCoords = ivec2(gl_FragCoord.xy);
 
 	vec3 albedo = texelFetch(u_Albedo, texCoords, 0).rgb;
 	vec3 viewSpacePosition = texelFetch(u_ViewSpacePosition, texCoords, 0).rgb;
-	vec3 viewSpaceNormal = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
+	vec3 n = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
 
-	if (dot(viewSpaceNormal, viewSpaceNormal) == 0)
-		discard;
-
-	vec3 n = normalize(viewSpaceNormal);
-
-	vec3 color;
 	uint numLights = lights.length();
 	for (int i = 0; i < numLights; i++)
 	{

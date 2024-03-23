@@ -17,7 +17,7 @@ void main()
 {
 	out_Albedo = albedo;
 	out_ViewSpacePosition = viewSpacePosition;
-	out_ViewSpaceNormal = viewSpaceNormal;
+	out_ViewSpaceNormal = normalize(viewSpaceNormal);
 
 	ivec2 texCoord = ivec2(gl_FragCoord.xy / u_TileSize);
 	//imageAtomicMin(u_TileMinTexture, texCoord, uint(float(0xFFFFFFFFu) * gl_FragDepth));

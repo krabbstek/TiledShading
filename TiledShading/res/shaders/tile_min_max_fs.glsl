@@ -12,8 +12,8 @@ void main()
 	ivec2 tileCoordinate = ivec2(gl_FragCoord.xy);
 	ivec2 fullSizeCoordinate = tileCoordinate * u_TileSize;
 
-	float minDepth = 1e38;
-	float maxDepth = -1e38;
+	float minDepth = 1e10;
+	float maxDepth = -1e10;
 	float depth;
 	ivec2 offset;
 	for (int i = 0; i < u_TileSize; i++)
@@ -23,6 +23,8 @@ void main()
 		{
 			offset.y = j;
 			depth = texelFetch(u_ViewSpacePositionTexture, fullSizeCoordinate + offset, 0).z;
+			if (depth == 0.0)
+				continue;
 			minDepth = min(minDepth, depth);
 			maxDepth = max(maxDepth, depth);
 		}
