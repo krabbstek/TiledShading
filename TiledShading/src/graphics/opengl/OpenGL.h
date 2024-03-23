@@ -2,6 +2,7 @@
 #include "GLFramebuffer.h"
 #include "GLIndexbuffer.h"
 #include "GLShader.h"
+#include "GLShaderStorageBuffer.h"
 #include "GLTexture2D.h"
 #include "GLVertexarray.h"
 #include "GLVertexBuffer.h"

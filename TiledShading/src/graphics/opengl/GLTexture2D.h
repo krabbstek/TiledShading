@@ -27,6 +27,7 @@ public:
 
 	inline unsigned int GetWidth() const { return m_Width; }
 	inline unsigned int GetHeight() const { return m_Height; }
+	inline GLuint RendererID() const { return m_RendererID; }
 
 private:
 	GLuint m_RendererID;
