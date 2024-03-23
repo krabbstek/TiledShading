@@ -20,6 +20,7 @@ uniform float u_LightFalloffThreshold;
 
 uniform int u_NumTileCols;
 uniform int u_TileSize;
+uniform int u_MaxNumLightsPerTile;
 
 struct Light
 {
@@ -97,9 +98,12 @@ void main()
 
 	vec3 diffuseTermPreComp = u_Material.albedo.rgb * (1.0 / PI);
 
-	for (int i = 0; i < tileIndex.count; i++)
+	for (int i = 0; i < u_MaxNumLightsPerTile; i++)
 	{
-		index = lightIndices[tileIndex.offset + i];
+		index = lightIndices[u_MaxNumLightsPerTile * TileIndex(tileCoords.x, tileCoords.y) + i];
+		if (index < 0)
+			break;
+
 		Light light = lights[index];
 
 		vec3 wi = light.viewSpacePosition.xyz - viewSpacePosition;

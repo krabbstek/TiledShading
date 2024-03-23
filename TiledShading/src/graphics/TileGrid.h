@@ -26,5 +26,5 @@ public:
 private:
 	int m_TileIndexMemoryLayout[2 * g_NumTileRows * g_NumTileCols];
 	std::vector<int> m_LightTiles[g_NumTileRows][g_NumTileCols];
-	std::vector<int> m_LightIndices;
+	int m_LightIndices[g_NumTileRows * g_NumTileCols * g_MaxNumLightsPerTile];
 };

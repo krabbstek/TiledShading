@@ -74,12 +74,13 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 
 	GLCall(glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT));
 	
+	m_LightIndexSSBO->Bind();
+	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_LightIndices), m_LightIndices));
+	/*
 	// No indices, only size from compute shader
 	m_TileIndexSSBO->Bind();
 	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_TileIndices) / 2, m_TileIndices));
 
-	m_LightIndexSSBO->Bind();
-	GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(m_LightIndices), m_LightIndices));
 
 	int lightIndexOffset = 0;
 	int size;
@@ -96,6 +97,6 @@ void TiledDeferredComputeLightTilesPass::Render(std::vector<Renderable*>& render
 		lightIndexOffset++;
 
 	m_LightIndexSSBO->SetData(m_LightIndices, lightIndexOffset * sizeof(int));
-	m_TileIndexSSBO->SetData(m_TileIndices, sizeof(m_TileIndices));
+	m_TileIndexSSBO->SetData(m_TileIndices, sizeof(m_TileIndices));*/
 #endif
 }

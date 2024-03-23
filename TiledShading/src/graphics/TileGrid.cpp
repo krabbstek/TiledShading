@@ -176,25 +176,6 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 				for (int col = leftLim; col < rightLim; col++)
 					m_LightTiles[row][col].push_back(lightIndex);
 		}
-#elif 0
-
-		planeDistance = bottomPlanes[0].Distance(light.viewSpacePosition);
-		if (planeDistance <= lightDistanceThreshold)
-			continue;
-
-		planeDistance = topPlanes[g_NumTileRows - 1].Distance(light.viewSpacePosition);
-		if (planeDistance <= lightDistanceThreshold)
-			continue;
-
-		planeDistance = leftPlanes[0].Distance(light.viewSpacePosition);
-		if (planeDistance <= lightDistanceThreshold)
-			continue;
-
-		planeDistance = rightPlanes[g_NumTileRows - 1].Distance(light.viewSpacePosition);
-		if (planeDistance <= lightDistanceThreshold)
-			continue;
-
-
 
 #else
 		for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
@@ -231,25 +212,23 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 #endif
 	}
 
-	int memoryLayoutIndex = 0;
-	m_LightIndices.clear();
+	int tileMemoryIndex = 0;
+	int size;
 
 	for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
 	{
 		for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
 		{
-			m_TileIndexMemoryLayout[memoryLayoutIndex++] = int(m_LightIndices.size());
-			numLights = int(m_LightTiles[tileRow][tileCol].size());
-			m_TileIndexMemoryLayout[memoryLayoutIndex++] = numLights;
+			std::vector<int>& tile = m_LightTiles[tileRow][tileCol];
+			size = std::min(int(tile.size()), int(g_MaxNumLightsPerTile));
+			memcpy(&m_LightIndices[tileMemoryIndex], tile.data(), size * sizeof(int));
+			if (size < g_MaxNumLightsPerTile)
+				m_LightIndices[tileMemoryIndex + size] = -1;
 
-			for (int i = 0; i < numLights; i++)
-				m_LightIndices.emplace_back(m_LightTiles[tileRow][tileCol][i]);
+			tileMemoryIndex += g_MaxNumLightsPerTile;
 		}
 	}
 
-	if (!m_LightIndices.size())
-		m_LightIndices.push_back(0);
-
-	lightIndexSSBO.SetData(m_LightIndices.data(), unsigned int(m_LightIndices.size() * sizeof(int)));
+	lightIndexSSBO.SetData(m_LightIndices, sizeof(m_LightIndices));
 	tileIndexSSBO.SetData(m_TileIndexMemoryLayout, sizeof(m_TileIndexMemoryLayout));
 }

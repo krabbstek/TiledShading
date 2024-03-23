@@ -11,6 +11,8 @@ TiledDeferredLightingPass::TiledDeferredLightingPass(Renderer& renderer, std::sh
 {
 	m_FullscreenMesh.AddTexture(viewSpacePositionTexture);
 	m_FullscreenMesh.AddTexture(viewSpaceNormalTexture);
+
+	m_Shader->SetUniform1i("u_MaxNumLightsPerTile", g_MaxNumLightsPerTile);
 }
 
 TiledDeferredLightingPass::~TiledDeferredLightingPass()
