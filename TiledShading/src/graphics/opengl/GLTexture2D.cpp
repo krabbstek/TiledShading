@@ -62,6 +62,7 @@ bool GLTexture2D::LoadFromFile(const char* filePath)
 	}
 
 	Load(format, data, width, height, format, GL_UNSIGNED_BYTE);
+	//Load(GL_RGBA8, data, width, height, format, GL_UNSIGNED_BYTE);
 
 	stbi_image_free(data);
 	return true;
