@@ -14,7 +14,7 @@ public:
 		std::shared_ptr<GLTexture2D> viewSpaceDepthTexture,
 		std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO,
 		std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO,
-		GLuint prepassFramebuffer,
+		GLuint forwardDepthRenderbuffer,
 		const Material& material);
 	~TiledForwardLightingPass();
 
@@ -25,6 +25,7 @@ protected:
 	std::shared_ptr<GLShaderStorageBuffer> m_LightSSBO;
 	std::shared_ptr<GLShaderStorageBuffer> m_LightIndexSSBO;
 	std::shared_ptr<GLShaderStorageBuffer> m_TileIndexSSBO;
-	GLuint m_PrepassFramebuffer;
+	GLuint m_LightingPassFramebuffer;
+	GLuint m_LightingPassColorRenderbuffer;
 	const Material& m_Material;
 };
