@@ -11,6 +11,7 @@
 #include "graphics/renderpasses/forward/ForwardPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredPrepass.h"
 #include "graphics/renderpasses/deferred/DeferredLightingPass.h"
+#include "graphics/renderpasses/deferred/TiledDeferredPrepass.h"
 
 #include <chrono>
 #include <iostream>
@@ -38,7 +39,7 @@ std::chrono::time_point<std::chrono::high_resolution_clock> start, current;
 float currentTime;
 
 std::vector<Plane> leftPlanes, rightPlanes, bottomPlanes, topPlanes;
-std::vector<std::pair<unsigned int, unsigned int>> tileLights[tileRows][tileCols];
+std::vector<std::pair<unsigned int, unsigned int>> tileLights[g_NumTileRows][g_NumTileCols];
 std::vector<int> lightIndices;
 int tileLightIndices[2 * g_WindowWidth * g_WindowHeight / (g_TileSize * g_TileSize)];
 
@@ -70,6 +71,7 @@ Renderer renderer;
 /// Render techniques
 std::shared_ptr<RenderTechnique> g_ForwardRendering;
 std::shared_ptr<RenderTechnique> g_DeferredRendering;
+std::shared_ptr<RenderTechnique> g_TiledDeferredRendering;
 
 /// Framebuffers
 GLuint defaultFramebuffer = 0;
@@ -109,11 +111,10 @@ GLShaderStorageBuffer* tileIndexSSBO;
 
 Material material;
 
-
-
 int Init();
 void InitForwardSimpleRendering();
 void InitDeferredRendering();
+void InitTiledDeferredRendering();
 void RenderDepthOnly(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
 void RenderTileMinDepth(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
 void RenderTileMaxDepth(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
@@ -131,11 +132,11 @@ int main()
 	if (initResult)
 		return initResult;
 
-	float fovPerTile = g_FOV / float(tileRows);
+	float fovPerTile = g_FOV / float(g_NumTileRows);
 	float halfFovPerTile = 0.5f * fovPerTile;
 
-	leftPlanes.push_back(Plane(cos(halfFovPerTile * -tileCols), 0.0f, sin(halfFovPerTile * -tileCols), 0.0f));
-	for (int col = -(tileCols - 2); col <= (tileCols - 2); col += 2)
+	leftPlanes.push_back(Plane(cos(halfFovPerTile * -g_NumTileCols), 0.0f, sin(halfFovPerTile * -g_NumTileCols), 0.0f));
+	for (int col = -(g_NumTileCols - 2); col <= (g_NumTileCols - 2); col += 2)
 	{
 		float c = cos(col * halfFovPerTile);
 		float s = sin(col * halfFovPerTile);
@@ -147,10 +148,10 @@ int main()
 		leftPlanes.push_back(Plane(normal, 0));
 		rightPlanes.push_back(Plane(-normal, 0));
 	}
-	rightPlanes.push_back(Plane(-cos(halfFovPerTile * tileCols), 0.0f, -sin(halfFovPerTile * tileCols), 0.0f));
+	rightPlanes.push_back(Plane(-cos(halfFovPerTile * g_NumTileCols), 0.0f, -sin(halfFovPerTile * g_NumTileCols), 0.0f));
 
-	bottomPlanes.push_back(Plane(vec3(0.0f, cos(halfFovPerTile * -tileCols), sin(halfFovPerTile * -tileCols)), 0));
-	for (int row = -(tileRows - 2); row <= tileRows - 2; row += 2)
+	bottomPlanes.push_back(Plane(vec3(0.0f, cos(halfFovPerTile * -g_NumTileCols), sin(halfFovPerTile * -g_NumTileCols)), 0));
+	for (int row = -(g_NumTileRows - 2); row <= g_NumTileRows - 2; row += 2)
 	{
 		float c = cos(row * halfFovPerTile);
 		float s = sin(row * halfFovPerTile);
@@ -162,10 +163,10 @@ int main()
 		bottomPlanes.push_back(Plane(normal, 0));
 		topPlanes.push_back(Plane(-normal, 0));
 	}
-	topPlanes.push_back(Plane(vec3(0.0f, -cos(halfFovPerTile * tileCols), -sin(halfFovPerTile * tileCols)), 0));
+	topPlanes.push_back(Plane(vec3(0.0f, -cos(halfFovPerTile * g_NumTileCols), -sin(halfFovPerTile * g_NumTileCols)), 0));
 
 	{
-		renderer.camera.projectionMatrix = mat4::Perspective(g_FOV, float(g_WindowWidth) / float(g_WindowHeight), 0.1f, 100.0f);
+		renderer.camera.projectionMatrix = mat4::Perspective(g_FOV, float(g_WindowWidth) / float(g_WindowHeight), g_NearPlaneDepth, g_FarPlaneDepth);
 		renderer.camera.position = vec3(0.0f, 4.0f, 12.0f);
 		renderer.camera.rotation = vec3(-0.4f, 0.0f, 0.0f);
 		mat4 V = renderer.camera.GetViewMatrix();
@@ -331,8 +332,11 @@ int main()
 			// Forward non-tiled rendering
 			InitForwardSimpleRendering();
 
-
+			// Deferred non-tiled rendering
 			InitDeferredRendering();
+
+			// Tiled deferred rendering
+			InitTiledDeferredRendering();
 		}
 		while (!glfwWindowShouldClose(window))
 		{
@@ -382,13 +386,21 @@ int main()
 			/*for (int x = 0; x < CUBE_GRID_SIZE; x++)
 				for (int y = 0; y < CUBE_GRID_SIZE; y++)
 					g_ForwardRendering.Render(cubeGrid[x][y]);*/
-			g_ForwardRendering->Render(planeMesh);
-			g_ForwardRendering->Render();
+			//g_ForwardRendering->Render(planeMesh);
+			//g_ForwardRendering->Render();
 
 			//g_DeferredRendering->Render(planeMesh);
 			//g_DeferredRendering->Render();
 
 #if 0
+			for (int x = 0; x < g_CubeGridSize; x++)
+				for (int y = 0; y < g_CubeGridSize; y++)
+					g_TiledDeferredRendering->Render(cubeGrid[x][y]);
+			g_TiledDeferredRendering->Render(planeMesh);
+			g_TiledDeferredRendering->Render();
+
+#else
+
 			switch (renderMode)
 			{
 			case NONE:
@@ -431,6 +443,7 @@ int main()
 
 	g_ForwardRendering.reset();
 	g_DeferredRendering.reset();
+	g_TiledDeferredRendering.reset();
 
 	ImGui_ImplGlfw_Shutdown();
 
@@ -670,15 +683,15 @@ void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const 
 	tileMaxTexture->Bind();
 	GLCall(glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, tileMax));
 
-	for (int col = 0; col < tileCols; col++)
-		for (int row = 0; row < tileRows; row++)
+	for (int col = 0; col < g_NumTileCols; col++)
+		for (int row = 0; row < g_NumTileRows; row++)
 			tileLights[row][col].clear();
 
 	for (int lightX = 0; lightX < g_LightGridSize; lightX++)
 	{
 		for (int lightZ = 0; lightZ < g_LightGridSize; lightZ++)
 		{
-			for (int col = 0; col < tileCols; col++)
+			for (int col = 0; col < g_NumTileCols; col++)
 			{
 				const vec3& viewSpacePosition = g_LightGrid[lightX][lightZ].viewSpacePosition;
 
@@ -689,7 +702,7 @@ void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const 
 				if (dRight < -lightRadius)
 					continue;
 
-				for (int row = 0; row < tileRows; row++)
+				for (int row = 0; row < g_NumTileRows; row++)
 				{
 					float dBottom = bottomPlanes[row].Distance(viewSpacePosition);
 					if (dBottom < -lightRadius)
@@ -714,13 +727,13 @@ void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const 
 
 	lightIndices.clear();
 
-	for (int row = 0; row < tileRows; row++)
+	for (int row = 0; row < g_NumTileRows; row++)
 	{
-		for (int col = 0; col < tileCols; col++)
+		for (int col = 0; col < g_NumTileCols; col++)
 		{
-			tileLightIndices[2 * (tileCols * row + col)] = lightIndices.size();
+			tileLightIndices[2 * (g_NumTileCols * row + col)] = lightIndices.size();
 			int size = tileLights[row][col].size();
-			tileLightIndices[2 * (tileCols * row + col) + 1] = size;
+			tileLightIndices[2 * (g_NumTileCols * row + col) + 1] = size;
 			for (int i = 0; i < size; i++)
 			{
 				std::pair<int, int> ind = tileLights[row][col][i];
@@ -744,7 +757,7 @@ void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const 
 	lightingTiledShader->SetUniform1f("u_Material.metalness", material.metalness);
 	lightingTiledShader->SetUniform1f("u_Material.fresnel", material.fresnel);
 	lightingTiledShader->SetUniform1i("u_TileSize", g_TileSize);
-	lightingTiledShader->SetUniform1i("u_NumTileCols", tileCols);
+	lightingTiledShader->SetUniform1i("u_NumTileCols", g_NumTileCols);
 
 	prepassAlbedoTexture->Bind(0);
 	prepassViewSpacePositionTexture->Bind(1);
@@ -776,6 +789,8 @@ void InitForwardSimpleRendering()
 
 void InitDeferredRendering()
 {
+	//GLTexStorage2D texStorage2D(GL_R32UI, g_WindowWidth, g_WindowHeight);
+
 	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
 	viewSpacePositionTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
 	viewSpacePositionTexture->SetMinMagFilter(GL_NEAREST);
@@ -814,4 +829,47 @@ void InitDeferredRendering()
 	g_DeferredRendering = std::make_shared<RenderTechnique>();
 	g_DeferredRendering->AddRenderPass(deferredPrepass);
 	g_DeferredRendering->AddRenderPass(deferredLightingPass);
+}
+
+void InitTiledDeferredRendering()
+{
+	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
+	viewSpacePositionTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
+	viewSpacePositionTexture->SetMinMagFilter(GL_NEAREST);
+	viewSpacePositionTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLTexture2D> viewSpaceNormalTexture = std::make_shared<GLTexture2D>();
+	viewSpaceNormalTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
+	viewSpaceNormalTexture->SetMinMagFilter(GL_NEAREST);
+	viewSpaceNormalTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLImageTexture2D> tileMinImageTexture = std::make_shared<GLImageTexture2D>(GL_R32I, GL_READ_WRITE, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize);
+	tileMinImageTexture->SetMinMagFilter(GL_NEAREST);
+	tileMinImageTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLImageTexture2D> tileMaxImageTexture = std::make_shared<GLImageTexture2D>(GL_R32I, GL_READ_WRITE, g_WindowWidth / g_TileSize, g_WindowHeight / g_TileSize);
+	tileMaxImageTexture->SetMinMagFilter(GL_NEAREST);
+	tileMaxImageTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLShader> tiledDeferredPrepassShader = std::make_shared<GLShader>();
+	tiledDeferredPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/tiled_deferred_prepass_vs.glsl");
+	tiledDeferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/tiled_deferred_prepass_fs.glsl");
+	tiledDeferredPrepassShader->CompileShaders();
+
+	//std::shared_ptr<GLShader> deferredLightingPassShader = std::make_shared<GLShader>();
+	//deferredLightingPassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/deferred_lighting_pass_vs.glsl");
+	//deferredLightingPassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/deferred_lighting_pass_fs.glsl");
+	//deferredLightingPassShader->CompileShaders();
+
+	std::shared_ptr<TiledDeferredPrepass> tiledDeferredPrepass = std::make_shared<TiledDeferredPrepass>(
+		renderer,
+		tiledDeferredPrepassShader,
+		viewSpacePositionTexture,
+		viewSpaceNormalTexture,
+		tileMinImageTexture,
+		tileMaxImageTexture
+	);
+
+	g_TiledDeferredRendering = std::make_shared<RenderTechnique>();
+	g_TiledDeferredRendering->AddRenderPass(tiledDeferredPrepass);
 }
