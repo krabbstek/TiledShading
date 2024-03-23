@@ -2,10 +2,10 @@
 
 #define PI 3.141592653589793
 
-in vec3 viewSpacePosition;
-in vec3 viewSpaceNormal;
-
 out vec3 out_Color;
+
+layout (binding = 0) uniform sampler2D u_ViewSpacePosition;
+layout (binding = 1) uniform sampler2D u_ViewSpaceNormal;
 
 uniform struct Material
 {
@@ -19,12 +19,17 @@ uniform struct Material
 uniform int u_NumTileCols;
 uniform int u_TileSize;
 uniform int u_MaxNumLightsPerTile;
-uniform float u_HeatmapAlpha = 0.4;
 
 struct Light
 {
 	vec4 viewSpacePosition;
 	vec4 color;
+};
+
+struct LightIndex
+{
+	int index;
+	uint depthMask;
 };
 
 struct TileLights
@@ -43,7 +48,7 @@ layout (std430, binding = 3) buffer LightBuffer
 layout (std430, binding = 4) buffer LightIndexBuffer
 {
 	int totalNumberOfIndices;
-	int lightIndices[];
+	LightIndex lightIndices[];
 };
 
 /// Integer array of tile indices in lightIndices
@@ -80,35 +85,12 @@ int TileIndex(int tileCol, int tileRow)
 	return tileCol + tileRow * u_NumTileCols;
 }
 
-float Fade(float low, float high, float intensity)
-{
-	float mid = 0.5 * (low + high);
-	float range = 0.5 * (high - low);
-	float x = 1.0 - clamp(abs(mid - intensity) / range, 0.0, 1.0);
-	return smoothstep(0.0, 1.0, x);
-}
-
-vec3 HeatmapColor(int numLights)
-{
-	vec3 red   = vec3(1.0, 0.0, 0.0);
-	vec3 green = vec3(0.0, 1.0, 0.0);
-	vec3 blue  = vec3(0.0, 0.0, 1.0);
-
-	float intensity = float(numLights) / float(u_MaxNumLightsPerTile);
-	if (intensity > 0.4)
-		return red;
-
-	blue = Fade(-0.2, 0.2, intensity) * blue;
-	green = Fade(0.0, 0.4, intensity) * green;
-	red = Fade(0.2, 0.6, intensity) * red;
-	return red + green + blue;
-}
-
 void main()
 {
 	ivec2 texCoords = ivec2(gl_FragCoord.xy);
 
-	vec3 n = normalize(viewSpaceNormal);
+	vec3 viewSpacePosition = texelFetch(u_ViewSpacePosition, texCoords, 0).rgb;
+	vec3 n = texelFetch(u_ViewSpaceNormal, texCoords, 0).rgb;
 	vec3 wo = -normalize(viewSpacePosition);
 
 	ivec2 tileCoords = texCoords / u_TileSize;
@@ -125,7 +107,7 @@ void main()
 	int numLights = tileLights[tileIndex].lightCount;
 	for (int i = 0; i < numLights; i++)
 	{
-		index = lightIndices[lightIndicesOffset + i];
+		index = lightIndices[lightIndicesOffset + i].index;
 		if (index < 0)
 			break;
 
@@ -165,6 +147,4 @@ void main()
 	vec3 microfacetTerm = u_Material.metalness * metalTerm + (1.0 - u_Material.metalness) * dielectricTerm;
 
 	out_Color = u_Material.reflectivity * microfacetTerm + (1.0 - u_Material.reflectivity) * totalDiffuseTerm;
-
-	out_Color = u_HeatmapAlpha * HeatmapColor(numLights) + (1.0 - u_HeatmapAlpha) * out_Color;
 }

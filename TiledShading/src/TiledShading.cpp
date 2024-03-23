@@ -19,6 +19,9 @@
 #include "graphics/renderpasses/deferred/tiled/TiledDeferredPrepass.h"
 #include "graphics/renderpasses/deferred/tiled/TiledDeferredComputeLightTilesPass.h"
 #include "graphics/renderpasses/deferred/tiled/TiledDeferredLightingPass.h"
+#include "graphics/renderpasses/deferred/clustered/ClusteredDeferredPrepass.h"
+#include "graphics/renderpasses/deferred/clustered/ClusteredDeferredComputeLightTilesPass.h"
+#include "graphics/renderpasses/deferred/clustered/ClusteredDeferredLightingPass.h"
 #include "math/math.h"
 #include "meshes/Cube.h"
 #include "meshes/PlaneMesh.h"
@@ -43,6 +46,7 @@ enum RENDER_MODE
 	TILED_FORWARD,
 	DEFERRED,
 	TILED_DEFERRED,
+	CLUSTERED_DEFERRED,
 	NUM_RENDER_MODES,
 };
 
@@ -62,6 +66,7 @@ void InitForwardRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr
 void InitTiledForwardRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> tileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void InitDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> tileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> tileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
+void InitClusteredDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> tileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer);
 void ImGuiRender();
 
 int main()
@@ -134,6 +139,9 @@ int main()
 
 			// Tiled deferred rendering
 			InitTiledDeferredRendering(prepassTimer, tileLightingComputationTimer, lightingPassTimer, totalRenderTimer);
+
+			// Clustered deferred rendering
+			InitClusteredDeferredRendering(prepassTimer, tileLightingComputationTimer, lightingPassTimer, totalRenderTimer);
 		}
 		while (!glfwWindowShouldClose(window))
 		{
@@ -254,6 +262,7 @@ void ImGuiRender()
 	ImGui::Text("Render mode");
 	for (int i = 0; i < NUM_RENDER_MODES; i++)
 		ImGui::RadioButton(renderModes[i].second.c_str(), (int*)&currentRenderMode, i);
+	ImGui::SliderFloat("Heatmap alpha", &g_HeatmapAlpha, 0.0, 1.0, "%.1f", 1.0f);
 
 	ImGui::Separator();
 
@@ -626,4 +635,106 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 
 	renderModes[TILED_DEFERRED].first = tiledDeferredRendering;
 	renderModes[TILED_DEFERRED].second = "Tiled deferred rendering";
+}
+
+void InitClusteredDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shared_ptr<Timer> deferredTileLightingComputationTimer, std::shared_ptr<GLTimer> lightingPassTimer, std::shared_ptr<GLTimer> totalRenderTimer)
+{
+	// Textures
+	std::shared_ptr<GLTexture2D> viewSpacePositionTexture = std::make_shared<GLTexture2D>();
+	viewSpacePositionTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
+	viewSpacePositionTexture->SetMinMagFilter(GL_NEAREST);
+	viewSpacePositionTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	std::shared_ptr<GLTexture2D> viewSpaceNormalTexture = std::make_shared<GLTexture2D>();
+	viewSpaceNormalTexture->Load(GL_RGB32F, nullptr, g_WindowWidth, g_WindowHeight, GL_RGB, GL_UNSIGNED_BYTE);
+	viewSpaceNormalTexture->SetMinMagFilter(GL_NEAREST);
+	viewSpaceNormalTexture->SetWrapST(GL_CLAMP_TO_EDGE);
+
+	// SSBOs
+	std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, BIT(24));
+	std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, g_NumTileRows * g_NumTileCols * 2 * sizeof(int));
+
+	// Shaders
+	std::shared_ptr<GLShader> clusteredDeferredPrepassShader = std::make_shared<GLShader>();
+	clusteredDeferredPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/clustered/clustered_deferred_prepass_vs.glsl");
+	clusteredDeferredPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/clustered/clustered_deferred_prepass_fs.glsl");
+	clusteredDeferredPrepassShader->CompileShaders();
+
+	std::shared_ptr<GLShader> clusteredDeferredLightingPassShader = std::make_shared<GLShader>();
+	clusteredDeferredLightingPassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/deferred/clustered/clustered_deferred_lighting_pass_vs.glsl");
+	clusteredDeferredLightingPassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/deferred/clustered/clustered_deferred_lighting_pass_fs.glsl");
+	clusteredDeferredLightingPassShader->CompileShaders();
+	clusteredDeferredLightingPassShader->SetUniform1i("u_NumTileCols", g_NumTileCols);
+	clusteredDeferredLightingPassShader->SetUniform1i("u_TileSize", g_TileSize);
+
+	std::shared_ptr<GLShader> clusteredDeferredComputeLightTilesShader = std::make_shared<GLShader>();
+	clusteredDeferredComputeLightTilesShader->AddShaderFromFile(GL_COMPUTE_SHADER, "res/shaders/deferred/clustered/clustered_deferred_compute_light_tiles_cs.glsl");
+	clusteredDeferredComputeLightTilesShader->CompileShaders();
+
+	// Render passes
+	std::shared_ptr<ClusteredDeferredPrepass> clusteredDeferredPrepass = std::make_shared<ClusteredDeferredPrepass>(
+		renderer,
+		clusteredDeferredPrepassShader,
+		viewSpacePositionTexture,
+		viewSpaceNormalTexture
+	);
+
+	std::shared_ptr<ClusteredDeferredComputeLightTilesPass> clusteredDeferredComputeLightTilesPass = std::make_shared<ClusteredDeferredComputeLightTilesPass>(
+		renderer,
+		clusteredDeferredComputeLightTilesShader,
+		viewSpacePositionTexture,
+		lightIndexSSBO,
+		tileIndexSSBO
+	);
+
+	std::shared_ptr<ClusteredDeferredLightingPass> clusteredDeferredLightingPass = std::make_shared<ClusteredDeferredLightingPass>(
+		renderer,
+		clusteredDeferredLightingPassShader,
+		viewSpacePositionTexture,
+		viewSpaceNormalTexture,
+		lightIndexSSBO,
+		tileIndexSSBO,
+		material
+	);
+
+	// Timers
+	std::shared_ptr<StartTimerPass> startPrepassRenderTimePass = std::make_shared<StartTimerPass>(renderer, prepassTimer);
+	std::shared_ptr<StopTimerPass> stopPrepassRenderTimePass = std::make_shared<StopTimerPass>(renderer, prepassTimer);
+
+	std::shared_ptr<StartTimerPass> startTileLightingComputationTimePass = std::make_shared<StartTimerPass>(renderer, deferredTileLightingComputationTimer);
+	std::shared_ptr<StopTimerPass> stopTileLightingComputationTimePass = std::make_shared<StopTimerPass>(renderer, deferredTileLightingComputationTimer);
+
+	std::shared_ptr<StartTimerPass> startLightingPassRenderTimePass = std::make_shared<StartTimerPass>(renderer, lightingPassTimer);
+	std::shared_ptr<StopTimerPass> stopLightingPassRenderTimePass = std::make_shared<StopTimerPass>(renderer, lightingPassTimer);
+
+	std::shared_ptr<StartTimerPass> startTotalRenderTimePass = std::make_shared<StartTimerPass>(renderer, totalRenderTimer);
+	std::shared_ptr<StopTimerPass> stopTotalRenderTimePass = std::make_shared<StopTimerPass>(renderer, totalRenderTimer);
+
+	std::shared_ptr<PlotTimersPass> plotTimersPass = std::make_shared<PlotTimersPass>(renderer);
+	plotTimersPass->AddLargeTimer("Total render time", totalRenderTimer);
+	plotTimersPass->AddSmallTimer("Prepass render time", prepassTimer);
+	plotTimersPass->AddSmallTimer("Tile lighting computation time", deferredTileLightingComputationTimer);
+	plotTimersPass->AddSmallTimer("Lighting pass render time", lightingPassTimer);
+
+	// Create RenderTechnique
+	std::shared_ptr<RenderTechnique> clusteredDeferredRendering = std::make_shared<RenderTechnique>();
+	// Plot render times
+	clusteredDeferredRendering->AddRenderPass(plotTimersPass);
+	clusteredDeferredRendering->AddRenderPass(startTotalRenderTimePass);
+	// Prepass
+	clusteredDeferredRendering->AddRenderPass(startPrepassRenderTimePass);
+	clusteredDeferredRendering->AddRenderPass(clusteredDeferredPrepass);
+	clusteredDeferredRendering->AddRenderPass(stopPrepassRenderTimePass);
+	// Compute light tiles
+	clusteredDeferredRendering->AddRenderPass(startTileLightingComputationTimePass);
+	clusteredDeferredRendering->AddRenderPass(clusteredDeferredComputeLightTilesPass);
+	clusteredDeferredRendering->AddRenderPass(stopTileLightingComputationTimePass);
+	// Lighting
+	clusteredDeferredRendering->AddRenderPass(startLightingPassRenderTimePass);
+	clusteredDeferredRendering->AddRenderPass(clusteredDeferredLightingPass);
+	clusteredDeferredRendering->AddRenderPass(stopLightingPassRenderTimePass);
+	clusteredDeferredRendering->AddRenderPass(stopTotalRenderTimePass);
+
+	renderModes[CLUSTERED_DEFERRED].first = clusteredDeferredRendering;
+	renderModes[CLUSTERED_DEFERRED].second = "Clustered deferred rendering";
 }

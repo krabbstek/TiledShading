@@ -2,11 +2,14 @@
 
 #define TILE_SIZE 10
 
+#define BIT(x) (1 << x)
+
 layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 
 uniform int u_MaxNumLightsPerTile = 256;
 uniform float u_FarPlaneDepth;
-uniform vec2 u_ViewportSize;
+
+uniform mat4 u_ProjectionMatrix;
 
 shared int s_LightIndicesOffset;
 shared int s_TileLightCount;
@@ -17,12 +20,20 @@ shared int s_MaxIDepth;
 shared float s_MinDepth;
 shared float s_MaxDepth;
 
-layout (binding = 0) uniform sampler2D u_ViewSpaceDepthTexture;
+shared uint s_DepthMask;
+
+layout (binding = 0) uniform sampler2D u_ViewSpacePositionTexture;
 
 struct Light
 {
 	vec4 viewSpacePosition;
 	vec4 color;
+};
+
+struct LightIndex
+{
+	int index;
+	uint depthMask;
 };
 
 struct TileLights
@@ -49,7 +60,7 @@ layout (std430, binding = 3) readonly buffer LightBuffer
 layout (std430, binding = 4) buffer LightIndexBuffer
 {
 	int totalNumberOfIndices;
-	int lightIndices[];
+	LightIndex lightIndices[];
 };
 
 /// Integer array of tile indices in lightIndices
@@ -89,6 +100,19 @@ float PlaneDistance(Plane plane, vec4 point)
 	return plane.a * point.x + plane.b * point.y + plane.c * point.z + plane.d;
 }
 
+uint DepthMaskBit(vec4 viewSpacePosition)
+{
+	vec4 clipSpacePosition = u_ProjectionMatrix * viewSpacePosition;
+	float clipSpaceDepth = clipSpacePosition.z / clipSpacePosition.w;
+	uint bit = BIT(int(16.0 * (clipSpaceDepth + 1.0)));
+	return bit;
+}
+
+uint LightDepthMask(vec4 viewSpacePosition, float radius)
+{
+	return ~0;
+}
+
 void main()
 {
 	// Init group and local invocation variables
@@ -105,6 +129,7 @@ void main()
 	Plane bottomPlane = bottomPlanes[tileRow];
 	Plane topPlane = topPlanes[tileRow];
 	float planeDistance;
+	float radius;
 	float threshold;
 
 	// Only initialize shared variables from one thread
@@ -113,28 +138,13 @@ void main()
 		s_TileLightCount = 0;
 		s_MinIDepth = 0x7FFFFFFF;
 		s_MaxIDepth = -0x7FFFFFFF;
+		s_DepthMask = 0;
 	}
 
 	barrier();
 
-	// Compute min and max depth in tile
-	float depth = texelFetch(u_ViewSpaceDepthTexture, texCoords, 0).x;
-	if (depth < 0.0)
-	{
-		int iDepth = int(depth * float(0x7FFFFFFF) / u_FarPlaneDepth);
-
-		atomicMin(s_MinIDepth, iDepth);
-		atomicMax(s_MaxIDepth, iDepth);
-	}
-
-	barrier();
-
-	// Only set float min and max depth from one thread
-	if (gl_LocalInvocationIndex == 0)
-	{
-		s_MinDepth = float(s_MinIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
-		s_MaxDepth = float(s_MaxIDepth) * u_FarPlaneDepth / float(0x7FFFFFFF);
-	}
+	// Compute depth mask
+	atomicOr(s_DepthMask, DepthMaskBit(texelFetch(u_ViewSpacePositionTexture, texCoords, 0)));
 
 	barrier();
 
@@ -144,7 +154,8 @@ void main()
 	for (int i = int(gl_LocalInvocationIndex); i < numLights; i += threadsPerTile)
 	{
 		light = lights[i];
-		threshold = -1.0 / sqrt(light.color.a);
+		radius = 1.0 / sqrt(light.color.a);
+		threshold = -radius;
 		
 		planeDistance = PlaneDistance(leftPlane, light.viewSpacePosition);
 		if (planeDistance <= threshold)
@@ -160,13 +171,7 @@ void main()
 		if (planeDistance <= threshold)
 			continue;
 
-		planeDistance = light.viewSpacePosition.z - s_MaxDepth;
-		if (planeDistance >= -threshold)
-			continue;
 
-		planeDistance = light.viewSpacePosition.z - s_MinDepth;
-		if (planeDistance <= threshold)
-			continue;
 			
 		// If light passed all planes and depth tests: add to list of lights
 		id = min(atomicAdd(s_TileLightCount, 1), u_MaxNumLightsPerTile - 1);
@@ -186,7 +191,7 @@ void main()
 
 	// Copy light indices from tileLightIndices to lightIndices
 	for (int i = int(gl_LocalInvocationIndex); i < numLights; i += threadsPerTile)
-		lightIndices[s_LightIndicesOffset + i] = s_TileLightIndices[i];
+		lightIndices[s_LightIndicesOffset + i].index = s_TileLightIndices[i];
 
 	if (gl_LocalInvocationIndex == 0)
 	{	

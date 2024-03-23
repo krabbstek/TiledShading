@@ -15,4 +15,6 @@ vec3 g_LightGridOffset = vec3(0.0f, 0.6f, 0.0f);
 vec2 g_LightGridScale = vec2(0.7f); //vec2(1.3f);
 bool g_DynamicLights = true;
 
+float g_HeatmapAlpha = 0.3f;
+
 float g_Time = 0.0f;
