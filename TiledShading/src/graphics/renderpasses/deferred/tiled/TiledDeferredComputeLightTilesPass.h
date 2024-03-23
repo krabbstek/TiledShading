@@ -19,6 +19,8 @@ public:
 
 protected:
 	TileGrid m_TileGrid;
+	int m_LightIndices[g_NumTileRows * g_NumTileCols * g_MaxNumLightsPerTile];
+	int m_NumLightsPerTile[g_NumTileRows * g_NumTileCols];
 	std::shared_ptr<GLImageTexture2D> m_TileMinDepthImageTexture;
 	std::shared_ptr<GLImageTexture2D> m_TileMaxDepthImageTexture;
 	std::shared_ptr<GLShaderStorageBuffer> m_LightSSBO;

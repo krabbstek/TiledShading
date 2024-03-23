@@ -1,6 +1,8 @@
 #version 430 core
 
-layout (local_size_x = 16, local_size_y = 16) in;
+#define TILE_SIZE 20
+
+layout (local_size_x = TILE_SIZE, local_size_y = TILE_SIZE) in;
 
 uniform int u_MaxNumLightsPerTile = 1024;
 uniform float u_LightFalloffThreshold;
@@ -109,4 +111,6 @@ void main()
 		id = min(atomicAdd(numLightsPerTile[tileIndex], 1), u_MaxNumLightsPerTile - 1);
 		lightIndices[lightIndicesOffset + id] = int(i);
 	}
+
+	numLightsPerTile[tileIndex] = int(numLights);
 }
