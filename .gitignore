@@ -1,0 +1,10 @@
+# Visual studio files
+.vs/*
+*.sln
+*.vcxproj
+*.vcxproj.user
+*.vcxproj.filters
+
+# Binaries and intermediates
+bin/*
+bin-int/*
