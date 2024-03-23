@@ -107,13 +107,12 @@ GLShaderStorageBuffer* lightSSBO;
 GLShaderStorageBuffer* lightIndexSSBO;
 GLShaderStorageBuffer* tileIndexSSBO;
 
-mat4 projectionMatrix;
-mat4 viewMatrix;
-mat4 modelMatrix;
-
 Material material;
 
+
+
 int Init();
+void InitForwardSimpleRendering();
 void InitDeferredRendering();
 void RenderDepthOnly(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
 void RenderTileMinDepth(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const PlaneMesh& planeMesh);
@@ -330,8 +329,8 @@ int main()
 		/// Render techniques
 		{
 			// Forward non-tiled rendering
-			g_ForwardRendering = std::make_shared<RenderTechnique>();
-			g_ForwardRendering->AddRenderPass(std::make_shared<ForwardPrepass>(renderer, m_SimpleShader));
+			InitForwardSimpleRendering();
+
 
 			InitDeferredRendering();
 		}
@@ -382,12 +381,12 @@ int main()
 
 			/*for (int x = 0; x < CUBE_GRID_SIZE; x++)
 				for (int y = 0; y < CUBE_GRID_SIZE; y++)
-					g_ForwardRendering.Render(cubeGrid[x][y]);
-			g_ForwardRendering.Render(planeMesh);
-			g_ForwardRendering.Render();*/
+					g_ForwardRendering.Render(cubeGrid[x][y]);*/
+			g_ForwardRendering->Render(planeMesh);
+			g_ForwardRendering->Render();
 
-			g_DeferredRendering->Render(planeMesh);
-			g_DeferredRendering->Render();
+			//g_DeferredRendering->Render(planeMesh);
+			//g_DeferredRendering->Render();
 
 #if 0
 			switch (renderMode)
@@ -758,6 +757,22 @@ void RenderTiledDeferred(Cube(&cubeGrid)[g_CubeGridSize][g_CubeGridSize], const 
 	GLCall(glDrawElements(GL_TRIANGLES, fullscreenIBO->Count(), GL_UNSIGNED_INT, 0));
 }
 
+
+void InitForwardSimpleRendering()
+{
+	std::shared_ptr<GLShader> forwardPrepassShader = std::make_shared<GLShader>();
+	forwardPrepassShader->AddShaderFromFile(GL_VERTEX_SHADER, "res/shaders/forward/forward_prepass_vs.glsl");
+	forwardPrepassShader->AddShaderFromFile(GL_FRAGMENT_SHADER, "res/shaders/forward/forward_prepass_fs.glsl");
+	forwardPrepassShader->CompileShaders();
+
+	std::shared_ptr<ForwardPrepass> forwardPrepass = std::make_shared<ForwardPrepass>(
+		renderer,
+		forwardPrepassShader
+	);
+
+	g_ForwardRendering = std::make_shared<RenderTechnique>();
+	g_ForwardRendering->AddRenderPass(forwardPrepass);
+}
 
 void InitDeferredRendering()
 {
