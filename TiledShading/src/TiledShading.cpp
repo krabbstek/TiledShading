@@ -413,7 +413,6 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 
 	// SSBOs
 	std::shared_ptr<GLShaderStorageBuffer> lightIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, 0);
-	std::shared_ptr<GLShaderStorageBuffer> tileIndexSSBO = std::make_shared<GLShaderStorageBuffer>(nullptr, 0);
 
 	// Shaders
 	std::shared_ptr<GLShader> tiledDeferredClearTileMinMaxDepthShader = std::make_shared<GLShader>();
@@ -459,8 +458,7 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 		tiledDeferredComputeLightTilesShader,
 		tileMinDepthImageTexture,
 		tileMaxDepthImageTexture,
-		lightIndexSSBO,
-		tileIndexSSBO
+		lightIndexSSBO
 	);
 
 	std::shared_ptr<TiledDeferredLightingPass> tiledDeferredLightingPass = std::make_shared<TiledDeferredLightingPass>(
@@ -469,7 +467,6 @@ void InitTiledDeferredRendering(std::shared_ptr<GLTimer> prepassTimer, std::shar
 		viewSpacePositionTexture,
 		viewSpaceNormalTexture,
 		lightIndexSSBO,
-		tileIndexSSBO,
 		material
 	);
 

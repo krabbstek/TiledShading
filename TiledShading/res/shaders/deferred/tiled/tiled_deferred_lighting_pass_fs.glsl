@@ -28,12 +28,6 @@ struct Light
 	vec4 color;
 };
 
-struct TileLightIndex
-{
-	int offset;
-	int count;
-};
-
 /// Lights, containing view space position and color
 layout (std430, binding = 3) buffer LightBuffer
 {
@@ -44,12 +38,6 @@ layout (std430, binding = 3) buffer LightBuffer
 layout (std430, binding = 4) buffer LightIndexBuffer
 {
 	int lightIndices[];
-};
-
-/// Integer array which tells shader where current tile's indices are located in lightIndices
-layout (std430, binding = 5) buffer TileBuffer
-{
-	TileLightIndex tileIndices[];
 };
 
 
@@ -89,8 +77,8 @@ void main()
 	vec3 wo = -normalize(viewSpacePosition);
 
 	ivec2 tileCoords = texCoords / u_TileSize;
-	int index = TileIndex(tileCoords.x, tileCoords.y);
-	TileLightIndex tileIndex = tileIndices[index];
+	int tileIndex = TileIndex(tileCoords.x, tileCoords.y) * u_MaxNumLightsPerTile;
+	int index;
 
 	vec3 dielectricTerm = vec3(0.0);
 	vec3 metalTerm = vec3(0.0);
@@ -100,7 +88,7 @@ void main()
 
 	for (int i = 0; i < u_MaxNumLightsPerTile; i++)
 	{
-		index = lightIndices[u_MaxNumLightsPerTile * TileIndex(tileCoords.x, tileCoords.y) + i];
+		index = lightIndices[tileIndex + i];
 		if (index < 0)
 			break;
 

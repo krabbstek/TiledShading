@@ -70,114 +70,23 @@ TileGrid::TileGrid()
 }
 
 
-void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDepth, float* tileMaxDepth, GLShaderStorageBuffer& lightIndexSSBO, GLShaderStorageBuffer& tileIndexSSBO)
+void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDepth, float* tileMaxDepth, GLShaderStorageBuffer& lightIndexSSBO)
 {
+	// Minimum value returned from Plane::Distance for light to pass test
 	float lightDistanceThreshold = -sqrt(g_LightIntensityMultiplier / g_LightFalloffThreshold);
-	float r2 = lightDistanceThreshold * lightDistanceThreshold;
+	// Pre-allocation
 	float planeDistance;
 
-	float tanY = tan(0.5f * g_FOV);
-	float halfTanPerTile = tanY * (1.0f / float(g_NumTileRows));
-
+	// Clear the lights in each tile
 	for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
 		for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
 			m_LightTiles[tileRow][tileCol].clear();
 
+	// Iterate through all lights and compare to planes
 	for (int lightIndex = 0; lightIndex < numLights; lightIndex++)
 	{
 		Light& light = lights[lightIndex];
 
-#if 0
-		// Check if the origin is within the threshold radius. If it is: check all tiles
-		if (light.viewSpacePosition.Dot(light.viewSpacePosition) <= r2)
-		{
-			for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
-			{
-				for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
-				{
-					planeDistance = light.viewSpacePosition.z - tileMinDepth[tileRow * g_NumTileCols + tileCol];
-					if (planeDistance <= lightDistanceThreshold)
-						continue;
-
-					planeDistance = tileMaxDepth[tileRow * g_NumTileCols + tileCol] - light.viewSpacePosition.z;
-					if (planeDistance <= lightDistanceThreshold)
-						continue;
-
-					m_LightTiles[tileRow][tileCol].push_back(lightIndex);
-				}
-			}
-		}
-		else
-		{
-			int leftLim, rightLim, bottomLim, topLim;
-
-			vec2 d = vec2(light.viewSpacePosition.x, light.viewSpacePosition.z);
-			float d2 = d.Dot(d);
-			// Compute left and right tile limits
-			float tNorm = sqrt(d2 - r2);
-			float dInv = 1.0f / sqrt(d2);
-			float cos = tNorm * dInv;
-			float sin = lightDistanceThreshold * dInv;
-
-			vec2 t = vec2(cos * d.x + sin * d.y, cos * d.y - sin * d.x);
-			if (t.y >= 0.0f)
-				leftLim = 0;
-			else
-			{
-				float tan = t.x / t.y;
-				float normalizedTan = tan / (0.5f * halfTanPerTile);
-				leftLim = int(floorf(normalizedTan + 0.5f * float(g_NumTileRows)));
-			}
-
-			t = vec2(cos * d.x - sin * d.y, cos * d.y + sin * d.x);
-			if (t.y >= 0.0f)
-				rightLim = g_NumTileCols;
-			else
-			{
-				float tan = t.x / t.y;
-				float normalizedTan = tan / (0.5f * halfTanPerTile);
-				rightLim = int(ceilf(normalizedTan + 0.5f * float(g_NumTileRows)));
-			}
-
-			d = vec2(light.viewSpacePosition.y, light.viewSpacePosition.z);
-			d2 = d.Dot(d);
-			// Compute bottom and top tile limits
-			tNorm = sqrt(d2 - r2);
-			dInv = 1.0f / sqrt(d2);
-			cos = tNorm * dInv;
-			sin = lightDistanceThreshold * dInv;
-
-			t = vec2(cos * d.x + sin * d.y, cos * d.y - sin * d.x);
-			if (t.y >= 0.0f)
-				bottomLim = 0;
-			else
-			{
-				float tan = t.x / t.y;
-				float normalizedTan = tan / (0.5f * halfTanPerTile);
-				bottomLim = int(floorf(normalizedTan + 0.5f * float(g_NumTileRows)));
-			}
-
-			t = vec2(cos * d.x - sin * d.y, cos * d.y + sin * d.x);
-			if (t.y >= 0.0f)
-				topLim = g_NumTileCols;
-			else
-			{
-				float tan = t.x / t.y;
-				float normalizedTan = tan / (0.5f * halfTanPerTile);
-				topLim = int(ceilf(normalizedTan + 0.5f * float(g_NumTileRows)));
-			}
-
-			leftLim = std::max(leftLim, 0);
-			rightLim = std::min(rightLim, g_NumTileCols);
-			bottomLim = std::max(bottomLim, 0);
-			topLim = std::min(topLim, g_NumTileRows);
-
-			for (int row = bottomLim; row < topLim; row++)
-				for (int col = leftLim; col < rightLim; col++)
-					m_LightTiles[row][col].push_back(lightIndex);
-		}
-
-#else
 		for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
 		{
 			planeDistance = bottomPlanes[tileRow].Distance(light.viewSpacePosition);
@@ -190,9 +99,10 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 
 			for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
 			{
+				// If light is to the left of current plane, then all following planes will also fail the test => break instead of continue
 				planeDistance = leftPlanes[tileCol].Distance(light.viewSpacePosition);
 				if (planeDistance <= lightDistanceThreshold)
-					continue;
+					break;
 
 				planeDistance = rightPlanes[tileCol].Distance(light.viewSpacePosition);
 				if (planeDistance <= lightDistanceThreshold)
@@ -206,15 +116,16 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 				if (planeDistance <= lightDistanceThreshold)
 					continue;
 
+				// Light passed all plane tests: add to tile list
 				m_LightTiles[tileRow][tileCol].push_back(lightIndex);
 			}
 		}
-#endif
 	}
 
 	int tileMemoryIndex = 0;
 	int size;
 
+	// Copy light indices to m_LightIndices, max g_MaxNumLightsPerTile lights per tile
 	for (int tileRow = 0; tileRow < g_NumTileRows; tileRow++)
 	{
 		for (int tileCol = 0; tileCol < g_NumTileCols; tileCol++)
@@ -229,6 +140,6 @@ void TileGrid::ComputeLightTiles(Light* lights, int numLights, float* tileMinDep
 		}
 	}
 
+	// Set data for light index SSBO
 	lightIndexSSBO.SetData(m_LightIndices, sizeof(m_LightIndices));
-	tileIndexSSBO.SetData(m_TileIndexMemoryLayout, sizeof(m_TileIndexMemoryLayout));
 }

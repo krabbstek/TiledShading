@@ -13,7 +13,7 @@ public:
 	TileGrid();
 	~TileGrid() {}
 
-	void ComputeLightTiles(Light* lights, int numLights, float* tileMinDepth, float* tileMaxDepth, GLShaderStorageBuffer& lightIndexSSBO, GLShaderStorageBuffer& tileIndexSSBO);
+	void ComputeLightTiles(Light* lights, int numLights, float* tileMinDepth, float* tileMaxDepth, GLShaderStorageBuffer& lightIndexSSBO);
 
 public:
 	// Memory layout
