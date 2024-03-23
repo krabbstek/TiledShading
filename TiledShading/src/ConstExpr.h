@@ -12,6 +12,7 @@ constexpr int g_CubeGridSize = 9;
 constexpr int g_LightGridSize = 15;
 
 constexpr float g_FOV = DegToRad(75.0f);
+constexpr float g_AspectRatio = float(g_WindowWidth) / float(g_WindowHeight);
 constexpr float g_NearPlaneDepth = 0.1f;
 constexpr float g_FarPlaneDepth = 100.0f;
 
